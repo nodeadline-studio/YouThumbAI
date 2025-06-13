@@ -8,6 +8,7 @@ import Footer from './components/Footer';
 import DemoEnhancer from './components/DemoEnhancer';
 import { Plus, Search, Settings, ChevronUp, Sparkles, Users, Image, Download, Video, X } from 'lucide-react';
 import { useVideoStore } from './store/videoStore';
+import { getVideoMetadata, extractVideoId } from './lib/youtubeApi';
 import './styles/App.css';
 
 function App() {
@@ -16,7 +17,10 @@ function App() {
   const [fabMenuOpen, setFabMenuOpen] = useState(false);
   const [showRecordingControls, setShowRecordingControls] = useState(false);
   const [isDemoMode, setIsDemoMode] = useState(false);
+  const [landingUrl, setLandingUrl] = useState('');
+  const [loadingLandingUrl, setLoadingLandingUrl] = useState(false);
   const videoData = useVideoStore(state => state.videoData);
+  const setVideoData = useVideoStore(state => state.setVideoData);
 
   // Check for demo mode
   useEffect(() => {
@@ -26,6 +30,45 @@ function App() {
 
   const toggleRecordingControls = () => {
     setShowRecordingControls(!showRecordingControls);
+  };
+
+  const handleLandingUrlSubmit = async () => {
+    if (!landingUrl.trim()) {
+      setShowInput(true);
+      return;
+    }
+
+    setLoadingLandingUrl(true);
+    try {
+      const videoId = extractVideoId(landingUrl);
+      if (!videoId) {
+        // If not a valid video URL, show the full input component
+        setShowInput(true);
+        setLoadingLandingUrl(false);
+        return;
+      }
+
+      const apiKey = import.meta.env.VITE_YOUTUBE_API_KEY;
+      if (!apiKey) {
+        throw new Error('YouTube API key not configured');
+      }
+
+      const videoDataResult = await getVideoMetadata(videoId, apiKey);
+      setVideoData(videoDataResult);
+      setLandingUrl(''); // Clear the input
+    } catch (error) {
+      console.error('Error processing URL:', error);
+      // If there's an error, show the full input component
+      setShowInput(true);
+    } finally {
+      setLoadingLandingUrl(false);
+    }
+  };
+
+  const handleLandingKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleLandingUrlSubmit();
+    }
   };
 
   return (
@@ -149,20 +192,39 @@ function App() {
                   <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-6">
                     <input 
                       type="text" 
+                      value={landingUrl}
+                      onChange={(e) => setLandingUrl(e.target.value)}
                       placeholder="Paste any YouTube URL to start..."
                       className="w-full sm:w-96 px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:border-purple-500 focus:outline-none"
-                      onKeyPress={(e) => {
-                        if (e.key === 'Enter') {
-                          setShowInput(true);
-                        }
-                      }}
+                      onKeyPress={handleLandingKeyPress}
+                      disabled={loadingLandingUrl}
                     />
                     <button
-                      onClick={() => setShowInput(true)}
-                      className="flex items-center px-8 py-3 bg-gradient-to-r from-purple-600 to-blue-500 hover:from-purple-700 hover:to-blue-600 rounded-lg text-white font-medium transition-all duration-300 transform hover:scale-105"
+                      onClick={handleLandingUrlSubmit}
+                      disabled={loadingLandingUrl}
+                      className="flex items-center px-8 py-3 bg-gradient-to-r from-purple-600 to-blue-500 hover:from-purple-700 hover:to-blue-600 disabled:from-gray-600 disabled:to-gray-700 rounded-lg text-white font-medium transition-all duration-300 transform hover:scale-105 disabled:transform-none"
                     >
-                      <Sparkles className="h-5 w-5 mr-2" />
-                      Create Thumbnail
+                      {loadingLandingUrl ? (
+                        <>
+                          <div className="w-5 h-5 mr-2 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                          Processing...
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="h-5 w-5 mr-2" />
+                          Create Thumbnail
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  
+                  {/* Advanced Options */}
+                  <div className="mb-4">
+                    <button
+                      onClick={() => setShowInput(true)}
+                      className="text-sm text-purple-400 hover:text-purple-300 transition-colors"
+                    >
+                      Need advanced options? Use full analyzer →
                     </button>
                   </div>
                   
@@ -206,7 +268,9 @@ function App() {
             </div>
           ) : (
             <>
-              {showInput && <VideoInput onClose={() => setShowInput(false)} />}
+              {showInput && !videoData && (
+                <VideoInput onClose={() => setShowInput(false)} />
+              )}
               {videoData && (
                 <>
                   <ThumbnailEditor />

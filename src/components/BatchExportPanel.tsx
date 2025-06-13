@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Loader2, Link, Download, ChevronUp, ChevronDown, X, HardDrive } from 'lucide-react';
 import { saveAs } from 'file-saver';
 import { useVideoStore } from '../store/videoStore';
-import { generateThumbnail } from '../services/dalleService';
+import { generateThumbnail } from '../modules/ai/dalleService';
 
 interface BatchVideoItem {
   id: string;

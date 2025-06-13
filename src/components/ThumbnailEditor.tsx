@@ -6,7 +6,7 @@ import ElementLibrary from './ElementLibrary';
 import BatchExportPanel from './BatchExportPanel';
 import { Sparkles, Download, Loader2, RefreshCw, Library, Sliders, Users, Image, Settings, Type } from 'lucide-react';
 import { saveAs } from 'file-saver';
-import { generateThumbnail } from '../services/dalleService';
+import { generateThumbnail } from '../modules/ai/dalleService';
 import { Tabs, TabList, Tab, TabPanel } from './Tabs';
 import PeopleExtractor from './PeopleExtractor';
 import SubtitleGenerator from './SubtitleGenerator';

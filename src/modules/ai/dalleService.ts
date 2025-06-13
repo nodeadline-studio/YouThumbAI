@@ -1,4 +1,4 @@
-import { VideoData, ThumbnailElement, CreatorType, Participant } from '../types';
+import { VideoData, ThumbnailElement, CreatorType, Participant } from '../../types';
 import { buildStyleProfile } from './styleProfiler';
 import { generateThumbnailWithFaceSwap, detectFacesInImage, isReplicateConfigured } from './replicateService';
 import OpenAI from 'openai';

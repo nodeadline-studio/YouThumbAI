@@ -1,4 +1,4 @@
-import { StyleProfile } from '../types';
+import { StyleProfile } from '../../types';
 
 interface ColorCount {
   color: string;

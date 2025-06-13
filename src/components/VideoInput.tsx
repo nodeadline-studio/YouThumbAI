@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Search, Loader2 } from 'lucide-react';
-import { fetchVideoData } from '../services/youtubeService';
+import { fetchVideoData } from '../modules/youtube/youtubeService';
 import { useVideoStore } from '../store/videoStore';
 import { extractVideoId } from '../lib/youtubeApi';
 

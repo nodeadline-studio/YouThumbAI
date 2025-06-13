@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useVideoStore } from '../store/videoStore';
 import { Sparkles, Loader2, Sliders, Bolt, Palette, Tag, AlignJustify, UserCheck } from 'lucide-react';
 import CollapsibleSection from './CollapsibleSection';
-import { isReplicateConfigured } from '../services/replicateService';
+import { isReplicateConfigured } from '../modules/ai/replicateService';
 import './GenerationPanel.css';
 
 interface GenerationPanelProps {

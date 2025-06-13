@@ -1,4 +1,4 @@
-import { VideoData } from '../types';
+import { VideoData } from '../../types';
 
 const REPLICATE_API_TOKEN = import.meta.env.VITE_REPLICATE_API_TOKEN;
 const API_BASE = 'https://api.replicate.com/v1';

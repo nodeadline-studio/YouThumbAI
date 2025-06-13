@@ -1,5 +1,5 @@
 import OpenAI from 'openai';
-import { VideoData } from '../types';
+import { VideoData } from '../../types';
 
 // Initialize the OpenAI client
 const openai = new OpenAI({

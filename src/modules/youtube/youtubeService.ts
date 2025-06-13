@@ -1,8 +1,8 @@
-import { VideoData } from '../types';
-import { getVideoMetadata as fetchVideoMetadata, extractVideoId } from '../lib/youtubeApi';
-import { generateDictionary, getDictionary, updateDictionary } from '../utils/dictionary';
-import { generateContextSummary } from './gptService';
-import { useVideoStore } from '../store/videoStore';
+import { VideoData } from '../../types';
+import { getVideoMetadata as fetchVideoMetadata, extractVideoId } from '../../lib/youtubeApi';
+import { generateDictionary, getDictionary, updateDictionary } from '../../utils/dictionary';
+import { generateContextSummary } from '../ai/gptService';
+import { useVideoStore } from '../../store/videoStore';
 
 const API_KEY = import.meta.env.VITE_YOUTUBE_API_KEY;
 

@@ -1,5 +1,5 @@
 import OpenAI from 'openai';
-import { VideoData, Dictionary } from '../types';
+import { VideoData, Dictionary } from '../../types';
 
 const openai = new OpenAI({
   apiKey: import.meta.env.VITE_OPENAI_API_KEY,

@@ -1,6 +1,6 @@
 import ColorThief from 'color-thief-browser';
-import { ChannelPattern, TextStyle, ColorPalette, LayoutPattern, SeriesPattern, TemporalTrend } from '../types';
-import { useVideoStore } from '../store/videoStore';
+import { ChannelPattern, TextStyle, ColorPalette, LayoutPattern, SeriesPattern, TemporalTrend } from '../../types';
+import { useVideoStore } from '../../store/videoStore';
 
 const colorThief = new ColorThief();
 

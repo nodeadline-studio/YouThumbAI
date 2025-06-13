@@ -16,7 +16,7 @@ export interface GenerationOptions {
   styleConsistency?: number;
   language?: string;
   contextSummary?: string | null;
-  creativeDirection?: 'original' | 'dynamic' | 'artistic';
+  creativeDirection?: 'original' | 'dynamic' | 'artistic' | 'gaming' | 'tutorial' | 'vlog' | 'business' | 'entertainment';
   costOptimization?: 'standard' | 'economy' | 'premium';
   creatorType?: CreatorType | null;
   participants?: Participant[];
@@ -38,6 +38,31 @@ const STYLE_VARIATIONS = [
     label: 'Artistic',
     emphasis: 'creativity',
     style: 'Develop a unique artistic interpretation with bold creative choices and visual metaphors.'
+  },
+  {
+    label: 'Gaming',
+    emphasis: 'intensity',
+    style: 'Create a high-energy gaming scene with neon lighting, dramatic angles, and vibrant game-inspired elements.'
+  },
+  {
+    label: 'Tutorial',
+    emphasis: 'clarity',
+    style: 'Design a clean, professional layout with clear focus on educational content and trustworthy presentation.'
+  },
+  {
+    label: 'Vlog',
+    emphasis: 'personal',
+    style: 'Capture a warm, personal atmosphere with authentic lighting and lifestyle-focused composition.'
+  },
+  {
+    label: 'Business',
+    emphasis: 'authority',
+    style: 'Create a sophisticated, modern design with professional color schemes and authoritative styling.'
+  },
+  {
+    label: 'Entertainment',
+    emphasis: 'impact',
+    style: 'Design for maximum visual impact with bold colors, dramatic contrasts, and attention-grabbing elements.'
   }
 ];
 
@@ -64,6 +89,21 @@ export const generateThumbnail = async (
           break;
         case 'artistic':
           stylesToUse = [STYLE_VARIATIONS[2]];
+          break;
+        case 'gaming':
+          stylesToUse = [STYLE_VARIATIONS[3]];
+          break;
+        case 'tutorial':
+          stylesToUse = [STYLE_VARIATIONS[4]];
+          break;
+        case 'vlog':
+          stylesToUse = [STYLE_VARIATIONS[5]];
+          break;
+        case 'business':
+          stylesToUse = [STYLE_VARIATIONS[6]];
+          break;
+        case 'entertainment':
+          stylesToUse = [STYLE_VARIATIONS[7]];
           break;
         default:
           stylesToUse = STYLE_VARIATIONS.slice(0, options.variationCount || 1);

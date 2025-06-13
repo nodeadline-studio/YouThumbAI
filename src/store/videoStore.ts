@@ -4,7 +4,7 @@ import { VideoData, ThumbnailElement, ImageControls, StyleProfile, Dictionary, P
 interface GenerationSettings {
   clickbaitIntensity: number;
   variationCount: 1 | 2 | 3;
-  creativeDirection: 'original' | 'dynamic' | 'artistic';
+  creativeDirection: 'original' | 'dynamic' | 'artistic' | 'gaming' | 'tutorial' | 'vlog' | 'business' | 'entertainment';
   costOptimization: 'standard' | 'economy' | 'premium';
   customKeywords?: string;
   enableFaceSwap?: boolean;

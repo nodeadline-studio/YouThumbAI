@@ -37,53 +37,140 @@ const GenerationPanel: React.FC<GenerationPanelProps> = ({ onGenerate }) => {
   
   return (
     <div className="space-y-4">
-      <CollapsibleSection id="creative-direction" title="Creative Direction" defaultExpanded={true}>
-        <div className="grid grid-cols-3 gap-3 mt-3">
+      <CollapsibleSection id="style-templates" title="Quick Style Templates" defaultExpanded={true}>
+        <div className="grid grid-cols-2 gap-3 mt-3">
           <div 
-            className={`relative p-3 rounded-lg border-2 cursor-pointer transition-all ${
+            className={`relative p-4 rounded-lg border-2 cursor-pointer transition-all ${
+              generationSettings.creativeDirection === 'gaming' 
+                ? 'border-red-500 bg-red-900 bg-opacity-20' 
+                : 'border-gray-700 hover:border-gray-500'
+            }`}
+            onClick={() => updateGenerationSettings({ 
+              creativeDirection: 'gaming',
+              clickbaitIntensity: 8,
+              costOptimization: 'standard'
+            })}
+          >
+            <div className="h-16 bg-gradient-to-br from-red-600 to-orange-500 rounded mb-2 flex items-center justify-center relative overflow-hidden">
+              <div className="text-sm font-bold text-white">🎮 GAMING</div>
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white to-transparent opacity-20 -skew-x-12 transform translate-x-full animate-pulse"></div>
+            </div>
+            <h4 className="text-sm font-medium text-red-400">Gaming & Esports</h4>
+            <p className="text-xs text-gray-400 mt-1">High energy, neon colors, dramatic angles</p>
+          </div>
+
+          <div 
+            className={`relative p-4 rounded-lg border-2 cursor-pointer transition-all ${
+              generationSettings.creativeDirection === 'tutorial' 
+                ? 'border-blue-500 bg-blue-900 bg-opacity-20' 
+                : 'border-gray-700 hover:border-gray-500'
+            }`}
+            onClick={() => updateGenerationSettings({ 
+              creativeDirection: 'tutorial',
+              clickbaitIntensity: 4,
+              costOptimization: 'standard'
+            })}
+          >
+            <div className="h-16 bg-gradient-to-br from-blue-600 to-cyan-500 rounded mb-2 flex items-center justify-center">
+              <div className="text-sm font-bold text-white">📚 TUTORIAL</div>
+            </div>
+            <h4 className="text-sm font-medium text-blue-400">Educational & How-to</h4>
+            <p className="text-xs text-gray-400 mt-1">Clean, professional, trustworthy</p>
+          </div>
+
+          <div 
+            className={`relative p-4 rounded-lg border-2 cursor-pointer transition-all ${
+              generationSettings.creativeDirection === 'vlog' 
+                ? 'border-pink-500 bg-pink-900 bg-opacity-20' 
+                : 'border-gray-700 hover:border-gray-500'
+            }`}
+            onClick={() => updateGenerationSettings({ 
+              creativeDirection: 'vlog',
+              clickbaitIntensity: 6,
+              costOptimization: 'standard'
+            })}
+          >
+            <div className="h-16 bg-gradient-to-br from-pink-600 to-purple-500 rounded mb-2 flex items-center justify-center">
+              <div className="text-sm font-bold text-white">✨ LIFESTYLE</div>
+            </div>
+            <h4 className="text-sm font-medium text-pink-400">Vlog & Lifestyle</h4>
+            <p className="text-xs text-gray-400 mt-1">Personal, warm, authentic vibes</p>
+          </div>
+
+          <div 
+            className={`relative p-4 rounded-lg border-2 cursor-pointer transition-all ${
+              generationSettings.creativeDirection === 'business' 
+                ? 'border-green-500 bg-green-900 bg-opacity-20' 
+                : 'border-gray-700 hover:border-gray-500'
+            }`}
+            onClick={() => updateGenerationSettings({ 
+              creativeDirection: 'business',
+              clickbaitIntensity: 5,
+              costOptimization: 'premium'
+            })}
+          >
+            <div className="h-16 bg-gradient-to-br from-green-600 to-emerald-500 rounded mb-2 flex items-center justify-center">
+              <div className="text-sm font-bold text-white">💼 BUSINESS</div>
+            </div>
+            <h4 className="text-sm font-medium text-green-400">Business & Finance</h4>
+            <p className="text-xs text-gray-400 mt-1">Professional, authoritative, modern</p>
+          </div>
+
+          <div 
+            className={`relative p-4 rounded-lg border-2 cursor-pointer transition-all ${
+              generationSettings.creativeDirection === 'entertainment' 
+                ? 'border-yellow-500 bg-yellow-900 bg-opacity-20' 
+                : 'border-gray-700 hover:border-gray-500'
+            }`}
+            onClick={() => updateGenerationSettings({ 
+              creativeDirection: 'entertainment',
+              clickbaitIntensity: 9,
+              costOptimization: 'standard'
+            })}
+          >
+            <div className="h-16 bg-gradient-to-br from-yellow-600 to-orange-500 rounded mb-2 flex items-center justify-center">
+              <div className="text-sm font-bold text-white">🎭 VIRAL</div>
+            </div>
+            <h4 className="text-sm font-medium text-yellow-400">Entertainment & Viral</h4>
+            <p className="text-xs text-gray-400 mt-1">Maximum impact, bold and dramatic</p>
+          </div>
+
+          <div 
+            className={`relative p-4 rounded-lg border-2 cursor-pointer transition-all ${
               generationSettings.creativeDirection === 'original' 
-                ? 'border-indigo-500 bg-indigo-900 bg-opacity-20' 
+                ? 'border-purple-500 bg-purple-900 bg-opacity-20' 
                 : 'border-gray-700 hover:border-gray-500'
             }`}
-            onClick={() => updateGenerationSettings({ creativeDirection: 'original' })}
+            onClick={() => updateGenerationSettings({ 
+              creativeDirection: 'original',
+              clickbaitIntensity: generationSettings.clickbaitIntensity,
+              costOptimization: 'standard'
+            })}
           >
-            <div className="h-20 bg-gradient-to-br from-gray-900 to-gray-800 rounded mb-2 flex items-center justify-center">
-              <div className="text-lg font-bold">Original</div>
+            <div className="h-16 bg-gradient-to-br from-purple-600 to-indigo-500 rounded mb-2 flex items-center justify-center">
+              <div className="text-sm font-bold text-white">🎨 CUSTOM</div>
             </div>
-            <h4 className="text-sm font-medium">Original Style</h4>
-            <p className="text-xs text-gray-400 mt-1">Matches channel identity</p>
-          </div>
-          
-          <div 
-            className={`relative p-3 rounded-lg border-2 cursor-pointer transition-all ${
-              generationSettings.creativeDirection === 'dynamic' 
-                ? 'border-indigo-500 bg-indigo-900 bg-opacity-20' 
-                : 'border-gray-700 hover:border-gray-500'
-            }`}
-            onClick={() => updateGenerationSettings({ creativeDirection: 'dynamic' })}
-          >
-            <div className="h-20 bg-gradient-to-br from-blue-900 to-purple-800 rounded mb-2 flex items-center justify-center">
-              <div className="text-lg font-bold">Dynamic</div>
-            </div>
-            <h4 className="text-sm font-medium">Dynamic</h4>
-            <p className="text-xs text-gray-400 mt-1">Action and motion focused</p>
-          </div>
-          
-          <div 
-            className={`relative p-3 rounded-lg border-2 cursor-pointer transition-all ${
-              generationSettings.creativeDirection === 'artistic' 
-                ? 'border-indigo-500 bg-indigo-900 bg-opacity-20' 
-                : 'border-gray-700 hover:border-gray-500'
-            }`}
-            onClick={() => updateGenerationSettings({ creativeDirection: 'artistic' })}
-          >
-            <div className="h-20 bg-gradient-to-br from-orange-900 to-pink-800 rounded mb-2 flex items-center justify-center">
-              <div className="text-lg font-bold">Artistic</div>
-            </div>
-            <h4 className="text-sm font-medium">Artistic</h4>
-            <p className="text-xs text-gray-400 mt-1">Creative interpretation</p>
+            <h4 className="text-sm font-medium text-purple-400">Custom Style</h4>
+            <p className="text-xs text-gray-400 mt-1">Match your channel's unique identity</p>
           </div>
         </div>
+        
+        {/* Template Preview */}
+        {generationSettings.creativeDirection && generationSettings.creativeDirection !== 'original' && (
+          <div className="mt-4 p-3 bg-gray-800 bg-opacity-30 rounded-lg border border-gray-600">
+            <div className="flex items-center space-x-2 mb-2">
+              <Sparkles className="w-4 h-4 text-indigo-400" />
+              <span className="text-sm font-medium">Template Applied</span>
+            </div>
+            <div className="text-xs text-gray-400">
+              {generationSettings.creativeDirection === 'gaming' && "High-energy scenes with neon lighting, dramatic angles, and vibrant game-inspired elements"}
+              {generationSettings.creativeDirection === 'tutorial' && "Clean, professional layouts with clear focus on educational content and trustworthy presentation"}
+              {generationSettings.creativeDirection === 'vlog' && "Warm, personal atmosphere with authentic lighting and lifestyle-focused composition"}
+              {generationSettings.creativeDirection === 'business' && "Sophisticated, modern design with professional color schemes and authoritative styling"}
+              {generationSettings.creativeDirection === 'entertainment' && "Maximum visual impact with bold colors, dramatic contrasts, and attention-grabbing elements"}
+            </div>
+          </div>
+        )}
       </CollapsibleSection>
 
       {/* Face Swap Section */}

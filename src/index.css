@@ -1,0 +1,65 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom scrollbar styles */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(139, 92, 246, 0.3);
+  border-radius: 8px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(139, 92, 246, 0.5);
+}
+
+/* Custom scrollbar styles */
+.thin-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(139, 92, 246, 0.3) transparent;
+}
+
+/* Element Library styles */
+.element-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 1rem;
+  padding: 0.5rem;
+}
+
+.element-card {
+  @apply bg-gray-800 rounded-lg p-3 hover:bg-gray-700 transition-all duration-200;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.element-preview {
+  @apply aspect-video bg-gray-900 rounded-lg flex items-center justify-center mb-2;
+  min-height: 80px;
+}
+
+.element-title {
+  @apply text-sm font-medium text-gray-300 truncate;
+}
+
+.element-icon {
+  @apply text-purple-400 opacity-75 group-hover:opacity-100 transition-opacity;
+}
+
+/* Thumbnail text editing */
+.thumbnail-text-input {
+  @apply bg-transparent border-none outline-none text-center;
+  min-width: 50px;
+}
+
+.thumbnail-text-input:focus {
+  @apply ring-2 ring-purple-500 ring-opacity-50;
+}

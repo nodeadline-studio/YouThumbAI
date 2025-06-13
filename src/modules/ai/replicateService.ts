@@ -11,21 +11,20 @@ interface ReplicatePrediction {
 }
 
 interface FaceDetectionResult {
-  faces: Array<{
-    bbox: [number, number, number, number]; // [x, y, width, height]
-    confidence: number;
-    landmarks?: Array<[number, number]>;
-  }>;
+  faces: any[];
 }
 
 interface FaceSwapOptions {
   sourceImage: string;
   targetImage: string;
   faceIndex?: number;
-  preserveOriginalSize?: boolean;
 }
 
-// Wait for prediction to complete
+export const isReplicateConfigured = (): boolean => {
+  return !!REPLICATE_API_TOKEN;
+};
+
+// Helper function to wait for prediction completion
 const waitForPrediction = async (predictionId: string, maxWaitTime = 60000): Promise<ReplicatePrediction> => {
   const startTime = Date.now();
   
@@ -47,21 +46,21 @@ const waitForPrediction = async (predictionId: string, maxWaitTime = 60000): Pro
       return prediction;
     }
     
-    // Wait 2 seconds before checking again
+    // Brief pause before next status check
     await new Promise(resolve => setTimeout(resolve, 2000));
   }
   
   throw new Error('Prediction timed out');
 };
 
-// Detect faces in an image using RetinaFace
+// Face detection using RetinaFace model
 export const detectFacesInImage = async (imageUrl: string): Promise<FaceDetectionResult> => {
   try {
     if (!REPLICATE_API_TOKEN) {
       throw new Error('Replicate API token not configured');
     }
 
-    // Start face detection prediction
+    // Start face detection process
     const response = await fetch(`${API_BASE}/predictions`, {
       method: 'POST',
       headers: {
@@ -93,20 +92,19 @@ export const detectFacesInImage = async (imageUrl: string): Promise<FaceDetectio
       faces: result.output || []
     };
   } catch (error) {
-    console.error('Error detecting faces:', error);
     // Return empty result on error to gracefully degrade
     return { faces: [] };
   }
 };
 
-// Swap faces between two images
+// Advanced face swapping between images
 export const swapFaces = async (options: FaceSwapOptions): Promise<string> => {
   try {
     if (!REPLICATE_API_TOKEN) {
       throw new Error('Replicate API token not configured');
     }
 
-    // Start face swap prediction
+    // Initialize face swap process
     const response = await fetch(`${API_BASE}/predictions`, {
       method: 'POST',
       headers: {
@@ -132,7 +130,7 @@ export const swapFaces = async (options: FaceSwapOptions): Promise<string> => {
     }
 
     const prediction = await response.json();
-    const result = await waitForPrediction(prediction.id, 120000); // 2 minutes timeout for face swap
+    const result = await waitForPrediction(prediction.id, 120000); // Extended timeout for complex processing
 
     if (result.status === 'failed') {
       throw new Error(`Face swap failed: ${result.error}`);
@@ -140,12 +138,11 @@ export const swapFaces = async (options: FaceSwapOptions): Promise<string> => {
 
     return result.output;
   } catch (error) {
-    console.error('Error swapping faces:', error);
     throw error;
   }
 };
 
-// Enhanced thumbnail generation with face swap option
+// Complete thumbnail generation with optional face swap
 export const generateThumbnailWithFaceSwap = async (
   videoData: VideoData,
   backgroundImageUrl: string,
@@ -156,33 +153,28 @@ export const generateThumbnailWithFaceSwap = async (
       return backgroundImageUrl;
     }
 
-    // First, detect faces in the original thumbnail
-    console.log('Detecting faces in thumbnail:', videoData.thumbnailUrl);
+    // First detect faces in the original thumbnail
     const faceDetection = await detectFacesInImage(videoData.thumbnailUrl);
     
     if (faceDetection.faces.length === 0) {
-      console.log('No faces detected, returning background image');
       return backgroundImageUrl;
     }
-
-    console.log(`Found ${faceDetection.faces.length} faces, performing face swap`);
     
-    // Perform face swap using the first detected face
-    const swappedImage = await swapFaces({
+    // Perform face swap using the detected face
+    const enhancedImage = await swapFaces({
       sourceImage: videoData.thumbnailUrl,
       targetImage: backgroundImageUrl,
       faceIndex: 0
     });
 
-    return swappedImage;
+    return enhancedImage;
   } catch (error) {
-    console.error('Error in face swap generation:', error);
-    // Fallback to background image if face swap fails
+    // Return original background if face swap fails
     return backgroundImageUrl;
   }
 };
 
-// Remove background from an image
+// Background removal utility
 export const removeBackground = async (imageUrl: string): Promise<string> => {
   try {
     if (!REPLICATE_API_TOKEN) {
@@ -216,17 +208,11 @@ export const removeBackground = async (imageUrl: string): Promise<string> => {
 
     return result.output;
   } catch (error) {
-    console.error('Error removing background:', error);
     throw error;
   }
 };
 
-// Helper function to check if Replicate is configured
-export const isReplicateConfigured = (): boolean => {
-  return !!REPLICATE_API_TOKEN;
-};
-
-// Test the Replicate connection
+// Connection test utility
 export const testReplicateConnection = async (): Promise<boolean> => {
   try {
     if (!REPLICATE_API_TOKEN) {
@@ -241,7 +227,6 @@ export const testReplicateConnection = async (): Promise<boolean> => {
 
     return response.ok;
   } catch (error) {
-    console.error('Error testing Replicate connection:', error);
     return false;
   }
 }; 

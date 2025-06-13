@@ -121,7 +121,6 @@ export async function getChannelThumbnails(channelId: string, apiKey: string) {
       }
     };
   } catch (error) {
-    console.error('Error fetching channel thumbnails:', error);
     throw error;
   }
 }
@@ -262,7 +261,6 @@ export async function getVideoMetadata(videoId: string, apiKey: string): Promise
       }
     };
   } catch (error) {
-    console.error('Error fetching YouTube video metadata:', error);
     throw error;
   }
 }

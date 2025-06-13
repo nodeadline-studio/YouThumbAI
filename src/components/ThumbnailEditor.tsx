@@ -4,7 +4,7 @@ import ThumbnailPreview from './ThumbnailPreview';
 import ThumbnailControls from './ThumbnailControls';
 import ElementLibrary from './ElementLibrary';
 import BatchExportPanel from './BatchExportPanel';
-import { Sparkles, Download, Loader2, RefreshCw, Library, Sliders, Users, Image, Settings, Type } from 'lucide-react';
+import { Sparkles, Download, Loader2, RefreshCw, Library, Sliders, Users, Image, Settings, Type, Blend } from 'lucide-react';
 import { saveAs } from 'file-saver';
 import { generateThumbnail } from '../modules/ai/dalleService';
 import { Tabs, TabList, Tab, TabPanel } from './Tabs';
@@ -41,6 +41,7 @@ const ThumbnailEditor: React.FC = () => {
   const [selectedVariation, setSelectedVariation] = useState<number>(-1);
   const [exporting, setExporting] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
+  const [blendRegenerating, setBlendRegenerating] = useState(false);
   const [selectedElementId, setSelectedElementId] = useState<string | null>(null);
   const [showElementControls, setShowElementControls] = useState(false);
   const [activeTab, setActiveTab] = useState<string>('elements');
@@ -91,6 +92,83 @@ const ThumbnailEditor: React.FC = () => {
       alert(errorMessage);
     } finally {
       setRegenerating(false);
+    }
+  };
+
+  const capturePreviewWithElements = async (): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const previewElement = document.querySelector('[data-thumbnail-preview]') as HTMLElement;
+      if (!previewElement) {
+        reject(new Error('Preview element not found'));
+        return;
+      }
+
+                    // Use html2canvas for high-quality capture
+       import('html2canvas').then(html2canvas => {
+         html2canvas.default(previewElement, {
+           useCORS: true,
+           allowTaint: true
+         }).then(canvas => {
+           const dataURL = canvas.toDataURL('image/png', 1.0);
+           resolve(dataURL);
+         }).catch(reject);
+       }).catch(reject);
+    });
+  };
+
+  const handleRegenerateWithElements = async () => {
+    if (selectedVariation === -1 || thumbnailElements.length === 0) {
+      alert('Please select a variation and add some elements first');
+      return;
+    }
+    
+    setBlendRegenerating(true);
+    try {
+      // Capture current preview with elements
+      const previewImage = await capturePreviewWithElements();
+      
+      // Create enhanced prompt that includes the elements
+      const elementDescriptions = thumbnailElements.map(el => {
+        if (el.type === 'text') {
+          return `Text element "${el.content}" at ${el.x}%, ${el.y}% with ${el.size}px font size in ${el.color} color`;
+        } else if (el.type === 'image') {
+          return `Image element at ${el.x}%, ${el.y}% with ${el.size}px size`;
+        }
+        return '';
+      }).filter(Boolean).join(', ');
+
+      const result = await generateThumbnail(
+        videoData,
+        thumbnailElements,
+        {
+          clickbaitIntensity: generationSettings.clickbaitIntensity,
+          variationCount: 1,
+          language: videoData.language.code,
+          selectedReferenceThumbnails,
+          contextSummary: `${contextSummary}\n\nBLEND ELEMENTS: Naturally integrate these overlay elements into the scene: ${elementDescriptions}. Make text look like it's painted or burned into the scene, make images look like they belong in the environment. The goal is to make everything look cohesive and professionally composed, not overlaid.`,
+          styleConsistency,
+          creativeDirection: generationSettings.creativeDirection,
+          costOptimization: generationSettings.costOptimization,
+          creatorType,
+          participants,
+          previewImage, // Pass the captured preview
+          blendMode: true // Special flag for element blending
+        }
+      );
+      
+      // Replace the selected variation with the new one
+      const newVariations = [...variations];
+      newVariations[selectedVariation] = result[0];
+      setVariations(newVariations);
+      
+      // Clear elements since they're now part of the image
+      setThumbnailElements([]);
+      
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to regenerate with elements';
+      alert(errorMessage);
+    } finally {
+      setBlendRegenerating(false);
     }
   };
 
@@ -254,6 +332,7 @@ const ThumbnailEditor: React.FC = () => {
             generatedImage={selectedVariation !== -1 ? variations[selectedVariation].url : null}
             isGenerating={generating}
             onDrop={handleCanvasDrop}
+            data-thumbnail-preview
           />
           
           <div className="mt-6 flex flex-wrap gap-4 justify-center">
@@ -290,23 +369,23 @@ const ThumbnailEditor: React.FC = () => {
             
             {variations.length > 0 && selectedVariation !== -1 && (
               <>
-                <button
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium flex items-center justify-center transition-colors duration-300"
-                  onClick={handleRegenerate}
-                  disabled={regenerating}
-                >
-                  {regenerating ? (
-                    <>
-                      <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                      Regenerating...
-                    </>
-                  ) : (
-                    <>
-                      <RefreshCw className="w-5 h-5 mr-2" />
-                      Regenerate
-                    </>
-                  )}
-                </button>
+                                  <button
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium flex items-center justify-center transition-colors duration-300"
+                    onClick={handleRegenerate}
+                    disabled={regenerating}
+                  >
+                    {regenerating ? (
+                      <>
+                        <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                        Regenerating...
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="w-5 h-5 mr-2" />
+                        Regenerate
+                      </>
+                    )}
+                  </button>
                 
                 <button
                   className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg font-medium flex items-center justify-center transition-colors duration-300"
@@ -326,6 +405,53 @@ const ThumbnailEditor: React.FC = () => {
                   )}
                 </button>
               </>
+            )}
+
+            {/* NEW BUTTON: Regenerate WITH Elements */}
+            {thumbnailElements.length > 0 && (
+              <div className="relative">
+                <button
+                  className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white px-6 py-2 rounded-lg font-medium flex items-center justify-center transition-all duration-300 transform hover:scale-105"
+                  onClick={handleRegenerateWithElements}
+                  disabled={blendRegenerating}
+                  title="Blend elements naturally into the image"
+                >
+                  {blendRegenerating ? (
+                    <>
+                      <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                      Blending Elements...
+                    </>
+                  ) : (
+                    <>
+                      <Blend className="w-5 h-5 mr-2" />
+                      Blend Elements
+                    </>
+                  )}
+                </button>
+                
+                {/* Tooltip */}
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-2 bg-black bg-opacity-90 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                  <div className="font-semibold mb-1">🎨 Blend Elements</div>
+                  <div>Captures your current preview and regenerates the image with text/shapes naturally integrated into the scene - making them look like they belong in the original photo!</div>
+                  <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-black"></div>
+                </div>
+              </div>
+            )}
+
+            {/* Help text for blend feature */}
+            {thumbnailElements.length > 0 && !blendRegenerating && (
+              <div className="w-full mt-4 p-3 bg-gradient-to-r from-purple-900/30 to-pink-900/30 border border-purple-500/30 rounded-lg">
+                <div className="flex items-start space-x-2">
+                  <Sparkles className="w-4 h-4 text-purple-400 mt-0.5 flex-shrink-0" />
+                  <div className="text-sm">
+                    <div className="font-medium text-purple-300 mb-1">Pro Tip: Blend Elements</div>
+                    <div className="text-gray-300">
+                      Use "Blend Elements" to make your text and graphics look naturally integrated into the scene - 
+                      as if they were painted, carved, or originally part of the image. Perfect for professional-looking thumbnails!
+                    </div>
+                  </div>
+                </div>
+              </div>
             )}
           </div>
         </div>

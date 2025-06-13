@@ -39,6 +39,11 @@ app.post('/api/detect-faces', async (req, res) => {
   ] });
 });
 
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
 app.listen(PORT, () => {
-  console.log(`Backend listening on port ${PORT}`);
+  // Server ready for requests
 });

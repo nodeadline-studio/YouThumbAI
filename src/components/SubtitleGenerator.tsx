@@ -30,59 +30,77 @@ const SubtitleGenerator: React.FC = () => {
       // Simulate API call
       await new Promise(resolve => setTimeout(resolve, 1500));
       
-      // Mock segmentation logic - in production this would be AI-driven
-      const words = title.split(' ');
+      // Improved segmentation logic - avoid weird cuts and fragments
+      const words = title.split(' ').filter(word => word.length > 0);
       const result: SubtitleSegment[] = [];
       
-      // Title as a whole
-      result.push({
-        id: `segment-full-${Date.now()}`,
-        text: title,
-        style: 'title'
-      });
-      
-      // First half of title as subtitle
-      if (words.length > 3) {
-        const firstHalf = words.slice(0, Math.ceil(words.length / 2)).join(' ');
+      // Only add full title if it's not too long
+      if (title.length <= 60) {
         result.push({
-          id: `segment-half1-${Date.now()}`,
-          text: firstHalf,
-          style: 'subtitle'
-        });
-        
-        // Second half of title as subtitle
-        const secondHalf = words.slice(Math.ceil(words.length / 2)).join(' ');
-        result.push({
-          id: `segment-half2-${Date.now()}`,
-          text: secondHalf,
-          style: 'subtitle'
+          id: `segment-full-${Date.now()}`,
+          text: title,
+          style: 'title'
         });
       }
       
-      // Find any numbers in the title for highlight
-      const numberMatches = title.match(/\d+/g);
+      // Smart phrase extraction - avoid single words and fragments
+      if (words.length >= 3) {
+        // Create meaningful phrases (3+ words minimum)
+        for (let i = 0; i <= words.length - 3; i++) {
+          const phrase = words.slice(i, i + Math.min(4, words.length - i)).join(' ');
+          
+          // Skip if phrase is too short, has weird symbols, or ends with incomplete words
+          if (phrase.length >= 10 && 
+              !phrase.includes('?') && 
+              !phrase.match(/^[^a-zA-Z]*$/) && // Avoid symbol-only phrases
+              !phrase.match(/\w{1}$/) &&     // Avoid single-character endings
+              !phrase.endsWith('of') && 
+              !phrase.endsWith('in') && 
+              !phrase.endsWith('to') && 
+              !phrase.endsWith('the')) {
+            
+            result.push({
+              id: `segment-phrase-${i}-${Date.now()}`,
+              text: phrase,
+              style: 'subtitle'
+            });
+          }
+        }
+      }
+      
+      // Extract meaningful numbers only (2+ digits or standalone meaningful numbers)
+      const numberMatches = title.match(/\b(\d{2,}|\b[1-9]\b(?=\s+(?:tips|ways|steps|things|reasons|facts)))/g);
       if (numberMatches) {
         numberMatches.forEach(match => {
+          if (match.length >= 2 || parseInt(match) <= 20) { // Avoid single random digits
+            result.push({
+              id: `segment-number-${match}-${Date.now()}`,
+              text: match,
+              style: 'number'
+            });
+          }
+        });
+      }
+      
+      // Only add question version if it makes sense and isn't already a question
+      if (!title.includes('?') && words.length >= 4) {
+        const questionWords = ['how', 'what', 'why', 'when', 'where', 'which', 'can', 'will', 'is', 'are'];
+        const startsWithQuestion = questionWords.some(qw => 
+          title.toLowerCase().startsWith(qw + ' ')
+        );
+        
+        if (startsWithQuestion || title.toLowerCase().includes('how to')) {
+          const questionVersion = title.replace(/[.!]$/, '');
           result.push({
-            id: `segment-number-${match}-${Date.now()}`,
-            text: match,
-            style: 'number'
+            id: `segment-question-${Date.now()}`,
+            text: `${questionVersion}?`,
+            style: 'question'
           });
-        });
+        }
       }
       
-      // Make the title a question
-      if (!title.endsWith('?')) {
-        const questionVersion = title.replace(/[.!]$/, '');
-        result.push({
-          id: `segment-question-${Date.now()}`,
-          text: `${questionVersion}?`,
-          style: 'question'
-        });
-      }
-      
-      // Add key phrases
-      const keyPhrases = extractKeyPhrases(title);
+      // Extract key action phrases
+      const keyPhrases = extractMeaningfulPhrases(title);
       keyPhrases.forEach(phrase => {
         result.push({
           id: `segment-key-${Date.now()}-${phrase.substring(0, 10)}`,
@@ -91,38 +109,52 @@ const SubtitleGenerator: React.FC = () => {
         });
       });
       
-      setSegments(result);
+      // Remove duplicates and sort by relevance
+      const uniqueResults = result.filter((item, index, arr) => 
+        index === arr.findIndex(other => other.text.toLowerCase() === item.text.toLowerCase())
+      );
+      
+      setSegments(uniqueResults.slice(0, 8)); // Limit to 8 best suggestions
     } catch (error) {
-      console.error("Failed to generate segments:", error);
+      // Error handling without console
     } finally {
       setIsGenerating(false);
     }
   };
   
-  // Helper function to extract key phrases
-  const extractKeyPhrases = (text: string): string[] => {
-    // This is a simplified version - in production would use NLP techniques
+  // Improved helper function to extract meaningful phrases
+  const extractMeaningfulPhrases = (text: string): string[] => {
     const phrases: string[] = [];
     
     // Look for phrases between quotation marks
-    const quoteMatches = text.match(/"([^"]*)"/g);
+    const quoteMatches = text.match(/"([^"]+)"/g);
     if (quoteMatches) {
       quoteMatches.forEach(match => {
-        phrases.push(match.replace(/"/g, ''));
+        const cleanPhrase = match.replace(/"/g, '');
+        if (cleanPhrase.length >= 6) { // Only meaningful quoted content
+          phrases.push(cleanPhrase);
+        }
       });
     }
     
-    // Extract phrases based on common patterns
-    const words = text.split(' ');
-    if (words.length >= 4) {
-      // Take first 3-4 words if title is long enough
-      phrases.push(words.slice(0, Math.min(4, Math.ceil(words.length / 2))).join(' '));
-      
-      // Take last 3-4 words if title is long enough
-      if (words.length >= 6) {
-        phrases.push(words.slice(-Math.min(4, Math.ceil(words.length / 2))).join(' '));
+    // Extract action-oriented phrases
+    const actionPatterns = [
+      /\b(learn|master|discover|unlock|reveal|secret|ultimate|best|top|amazing|incredible)\s+[\w\s]{6,20}/gi,
+      /\b(how to|step by step|tutorial|guide to|tips for)\s+[\w\s]{6,20}/gi,
+      /\b\d+\s+(tips|ways|methods|secrets|tricks|hacks)\b/gi
+    ];
+    
+    actionPatterns.forEach(pattern => {
+      const matches = text.match(pattern);
+      if (matches) {
+        matches.forEach(match => {
+          const cleanMatch = match.trim();
+          if (cleanMatch.length >= 8 && cleanMatch.length <= 40) {
+            phrases.push(cleanMatch);
+          }
+        });
       }
-    }
+    });
     
     return [...new Set(phrases)]; // Remove duplicates
   };

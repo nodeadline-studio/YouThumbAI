@@ -54,7 +54,7 @@ Requirements:
 
     return response.choices[0]?.message?.content || "A compelling visual scene";
   } catch (error) {
-    console.error('Error generating context summary:', error);
+    // Fallback to video description if API fails
     return videoData.description.slice(0, 100);
   }
 };

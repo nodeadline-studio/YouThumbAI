@@ -1,24 +1,106 @@
 import React from 'react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ThemeProvider } from './contexts/ThemeContext';
 import Header from './components/Header';
 import VideoInput from './components/VideoInput';
 import ThumbnailEditor from './components/ThumbnailEditor';
 import Footer from './components/Footer';
-import { Plus, Search, Settings, ChevronUp, Sparkles, Users, Image, Download } from 'lucide-react';
+import DemoEnhancer from './components/DemoEnhancer';
+import { Plus, Search, Settings, ChevronUp, Sparkles, Users, Image, Download, Video, X } from 'lucide-react';
 import { useVideoStore } from './store/videoStore';
 import './styles/App.css';
-
 
 function App() {
   const [showInput, setShowInput] = useState(false);
   const [quickSettingsOpen, setQuickSettingsOpen] = useState(false);
   const [fabMenuOpen, setFabMenuOpen] = useState(false);
+  const [showRecordingControls, setShowRecordingControls] = useState(false);
+  const [isDemoMode, setIsDemoMode] = useState(false);
   const videoData = useVideoStore(state => state.videoData);
+
+  // Check for demo mode
+  useEffect(() => {
+    const demoMode = localStorage.getItem('demo-mode') === 'true';
+    setIsDemoMode(demoMode);
+  }, []);
+
+  const toggleRecordingControls = () => {
+    setShowRecordingControls(!showRecordingControls);
+  };
 
   return (
     <ThemeProvider>
       <div className="min-h-screen bg-gradient-to-br from-gray-900 to-gray-800 text-white">
+        {/* Floating Recording Control Button */}
+        <button
+          onClick={toggleRecordingControls}
+          className={`fixed top-4 right-4 z-50 p-3 rounded-full shadow-lg transition-all duration-300 ${
+            showRecordingControls 
+              ? 'bg-red-600 hover:bg-red-700 text-white' 
+              : 'bg-purple-600 hover:bg-purple-700 text-white'
+          }`}
+          title={showRecordingControls ? 'Hide Recording Controls' : 'Show Recording Controls'}
+        >
+          {showRecordingControls ? (
+            <X className="w-5 h-5" />
+          ) : (
+            <Video className="w-5 h-5" />
+          )}
+        </button>
+
+        {/* Recording Controls Panel */}
+        {showRecordingControls && (
+          <div className="fixed top-16 right-4 z-40 w-80 bg-black bg-opacity-90 backdrop-blur-lg rounded-xl border border-gray-700 p-4 shadow-xl">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center space-x-2">
+                <Video className="w-5 h-5 text-red-400" />
+                <h3 className="text-lg font-semibold text-white">Recording Controls</h3>
+              </div>
+              <button
+                onClick={toggleRecordingControls}
+                className="text-gray-400 hover:text-white transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-300">Demo Mode</span>
+                <div className={`w-10 h-6 rounded-full relative transition-colors ${
+                  isDemoMode ? 'bg-green-600' : 'bg-gray-600'
+                }`}>
+                  <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${
+                    isDemoMode ? 'translate-x-4' : 'translate-x-1'
+                  }`} />
+                </div>
+              </div>
+              
+              <button className="w-full py-2 px-4 bg-red-600 hover:bg-red-700 rounded-lg text-white text-sm font-medium transition-colors">
+                Start Recording
+              </button>
+              
+              <button className="w-full py-2 px-4 bg-gray-700 hover:bg-gray-600 rounded-lg text-white text-sm font-medium transition-colors">
+                Screenshot Mode
+              </button>
+              
+              <div className="pt-2 border-t border-gray-700">
+                <p className="text-xs text-gray-400 mb-2">Recording Settings</p>
+                <div className="space-y-2">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-gray-400">Quality:</span>
+                    <span className="text-white">1080p @ 30fps</span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-gray-400">Format:</span>
+                    <span className="text-white">MP4</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         <Header />
         <main className="container mx-auto px-4 py-8">
           {!videoData && !showInput ? (
@@ -30,7 +112,7 @@ function App() {
                   <span className="block text-3xl mt-2 text-gray-300">in 60 seconds</span>
                 </h1>
                 <p className="text-xl text-gray-400 mb-8 max-w-3xl mx-auto">
-                  Transform any YouTube URL into professional thumbnails using AI-powered design and intelligent automation. 
+                  Transform any YouTube URL into professional thumbnails using AI-powered design and intelligent automation.
                   Perfect for creators, agencies, and marketing teams.
                 </p>
                 
@@ -198,6 +280,8 @@ function App() {
           )}
         </main>
         <Footer />
+        {/* Demo enhancer (only visible when recording controls are hidden) */}
+        {isDemoMode && !showRecordingControls && <DemoEnhancer enabled={process.env.NODE_ENV === 'development'} />}
       </div>
     </ThemeProvider>
   );

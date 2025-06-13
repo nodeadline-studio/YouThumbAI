@@ -10,29 +10,28 @@ const patternCache = new Map<string, { pattern: ChannelPattern; timestamp: numbe
 
 export async function analyzeChannelThumbnails(thumbnails: string[]): Promise<ChannelPattern> {
   try {
-    // Check cache first
+    // Check cache first for efficiency
     const channelId = thumbnails[0]?.split('/')[4]; // Extract channel ID from URL
     if (channelId) {
-      const cached = patternCache.get(channelId);
-      if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
-        return cached.pattern;
+      const cachedPattern = patternCache.get(channelId);
+      if (cachedPattern && Date.now() - cachedPattern.timestamp < CACHE_DURATION) {
+        return cachedPattern.pattern;
       }
     }
 
-    // Load all thumbnail images
-    const images = await Promise.all(
-      thumbnails.map(url => loadImage(url)).map(p => p.catch(err => {
-        console.warn('Failed to load thumbnail:', err);
-        return null;
-      }))
-    );
-
-    const validImages = images.filter(Boolean) as HTMLImageElement[];
+    // Load and validate thumbnail images
+    const imagePromises = thumbnails.map(url => loadImage(url).catch(err => {
+      return null; // Skip failed images gracefully
+    }));
+    
+    const loadedImages = await Promise.all(imagePromises);
+    const validImages = loadedImages.filter(Boolean) as HTMLImageElement[];
+    
     if (validImages.length < 3) {
       throw new Error('Not enough valid thumbnails to analyze pattern');
     }
 
-    // Extract patterns
+    // Extract visual patterns from thumbnails
     const textStyles = await detectTextStyles(validImages);
     const colorPalettes = await extractColorPalettes(validImages);
     const layouts = detectLayoutPatterns(validImages);
@@ -40,11 +39,8 @@ export async function analyzeChannelThumbnails(thumbnails: string[]): Promise<Ch
     const temporalTrends = analyzeTemporalTrends(validImages);
 
     const confidence = calculateConfidence(textStyles, colorPalettes, layouts);
-    if (confidence < MINIMUM_CONFIDENCE_THRESHOLD) {
-      console.warn('Low confidence in pattern detection:', confidence);
-    }
-
-    const pattern: ChannelPattern = {
+    
+    const channelPattern: ChannelPattern = {
       id: generatePatternId(),
       textStyles,
       colorPalettes,
@@ -54,17 +50,16 @@ export async function analyzeChannelThumbnails(thumbnails: string[]): Promise<Ch
       confidence
     };
 
-    // Cache the result
+    // Cache the analyzed pattern
     if (channelId) {
       patternCache.set(channelId, {
-        pattern,
+        pattern: channelPattern,
         timestamp: Date.now()
       });
     }
 
-    return pattern;
+    return channelPattern;
   } catch (error) {
-    console.error('Error analyzing channel thumbnails:', error);
     throw new Error('Failed to analyze channel pattern');
   }
 }
@@ -128,12 +123,10 @@ async function extractColorPalettes(images: HTMLImageElement[]): Promise<ColorPa
           dominantColor = await colorThief.getColor(img);
           palette = await colorThief.getPalette(img, 5);
         } catch (colorError) {
-          console.warn('Color extraction failed:', colorError);
           return null;
         }
         
         if (!dominantColor || !Array.isArray(dominantColor) || dominantColor.length !== 3 || !palette) {
-          console.warn('Failed to extract colors from image');
           return null;
         }
         
@@ -145,7 +138,6 @@ async function extractColorPalettes(images: HTMLImageElement[]): Promise<ColorPa
           frequency: 1
         };
       } catch (error) {
-        console.error('Error extracting colors:', error);
         return null;
       }
     })
@@ -263,7 +255,6 @@ function rgbToHex([r, g, b]: number[]): string {
   if (!Array.isArray([r, g, b]) || 
       [r, g, b].length !== 3 || 
       [r, g, b].some(x => typeof x !== 'number' || isNaN(x) || x < 0 || x > 255)) {
-    console.warn('Invalid RGB values:', [r, g, b]);
     return '#000000';
   }
   
@@ -294,10 +285,6 @@ function aggregatePalettes(palettes: ColorPalette[]): ColorPalette[] {
   });
 
   return Array.from(grouped.values()).map(palette => ({
-    id: palette.id,
-    primary: palette.primary || [],
-    secondary: palette.secondary || [],
-    accent: palette.accent || [],
     ...palette,
     frequency: palette.frequency / totalCount
   }));

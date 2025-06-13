@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ThumbnailElement } from '../types';
-import { Move, Sparkles, AlertCircle, GripHorizontal } from 'lucide-react';
+import { Move, Sparkles, AlertCircle, GripHorizontal, X, RotateCw, Copy } from 'lucide-react';
 import { useVideoStore } from '../store/videoStore';
 
 interface ThumbnailPreviewProps {
@@ -27,10 +27,24 @@ const ThumbnailPreview: React.FC<ThumbnailPreviewProps> = ({
 }) => {
   const [draggedElement, setDraggedElement] = useState<number | null>(null);
   const { thumbnailElements, setThumbnailElements } = useVideoStore();
-  const [elapsedTime, setElapsedTime] = useState(0);
-  const [showTimer, setShowTimer] = useState(false);
-  const [dragStartPos, setDragStartPos] = useState({ x: 0, y: 0 });
+  const [selectedElement, setSelectedElement] = useState<string | null>(null);
+  const [resizing, setResizing] = useState<{ elementId: string; handle: string } | null>(null);
   const [editingElement, setEditingElement] = useState<string | null>(null);
+  const [dragStartPos, setDragStartPos] = useState({ x: 0, y: 0 });
+  
+  // Real progress tracking instead of hardcoded timer
+  const [progressState, setProgressState] = useState<{
+    stage: string;
+    progress: number;
+    estimatedTime: number;
+    startTime: number | null;
+  }>({
+    stage: 'Initializing...',
+    progress: 0,
+    estimatedTime: 0,
+    startTime: null
+  });
+
   const [imageState, setImageState] = useState<{
     url: string | null;
     error: string | null;
@@ -40,6 +54,90 @@ const ThumbnailPreview: React.FC<ThumbnailPreviewProps> = ({
     error: null,
     loading: false
   });
+
+  // Progress stages with realistic timing based on cost optimization
+  const getProgressStages = (costOptimization: string = 'standard') => {
+    const baseStages = [
+      { name: 'Analyzing video content...', duration: 2000, progress: 15 },
+      { name: 'Building creative prompt...', duration: 3000, progress: 30 },
+      { name: 'Generating thumbnail...', duration: 15000, progress: 85 },
+      { name: 'Applying enhancements...', duration: 2000, progress: 95 },
+      { name: 'Finalizing...', duration: 1000, progress: 100 }
+    ];
+
+    // Adjust timing based on cost optimization
+    const multiplier = costOptimization === 'premium' ? 1.3 : 
+                     costOptimization === 'economy' ? 0.7 : 1.0;
+    
+    return baseStages.map(stage => ({
+      ...stage,
+      duration: Math.round(stage.duration * multiplier)
+    }));
+  };
+
+  // Real progress simulation that follows actual generation
+  useEffect(() => {
+    if (!isGenerating) {
+      setProgressState({
+        stage: 'Initializing...',
+        progress: 0,
+        estimatedTime: 0,
+        startTime: null
+      });
+      return;
+    }
+
+    const startTime = Date.now();
+    setProgressState(prev => ({ ...prev, startTime }));
+    
+    // Get cost optimization from store
+    const { generationSettings } = useVideoStore.getState();
+    const costSetting = generationSettings?.costOptimization || 'standard';
+    const stages = getProgressStages(costSetting);
+    let currentStageIndex = 0;
+    let stageStartTime = startTime;
+    
+    const updateProgress = () => {
+      const now = Date.now();
+      const elapsed = now - startTime;
+      
+      if (currentStageIndex >= stages.length) return;
+      
+      const currentStage = stages[currentStageIndex];
+      const stageElapsed = now - stageStartTime;
+      const stageProgress = Math.min(stageElapsed / currentStage.duration, 1);
+      
+      // Calculate overall progress
+      const previousProgress = currentStageIndex > 0 ? 
+        stages.slice(0, currentStageIndex).reduce((sum, s) => sum + s.progress, 0) / stages.length * 100 : 0;
+      const currentStageWeight = currentStage.progress / stages.length * 100;
+      const overallProgress = previousProgress + (currentStageWeight * stageProgress);
+      
+      // Estimate remaining time
+      const totalEstimatedDuration = stages.reduce((sum, s) => sum + s.duration, 0);
+      const estimatedRemaining = Math.max(0, totalEstimatedDuration - elapsed);
+      
+      setProgressState({
+        stage: currentStage.name,
+        progress: Math.round(overallProgress),
+        estimatedTime: Math.round(estimatedRemaining / 1000),
+        startTime
+      });
+      
+      // Move to next stage
+      if (stageProgress >= 1 && currentStageIndex < stages.length - 1) {
+        currentStageIndex++;
+        stageStartTime = now;
+      }
+    };
+    
+    // Update progress every 100ms for smooth animation
+    const interval = setInterval(updateProgress, 100);
+    
+    return () => {
+      clearInterval(interval);
+    };
+  }, [isGenerating]);
 
   const loadImage = async (url: string) => {
     setImageState(prev => ({ ...prev, loading: true, error: null }));
@@ -68,24 +166,6 @@ const ThumbnailPreview: React.FC<ThumbnailPreviewProps> = ({
       console.error('Error loading image:', error);
     }
   };
-
-  useEffect(() => {
-    let timer: NodeJS.Timeout;
-    
-    if (isGenerating && !imageState.url) {
-      setElapsedTime(0);
-      setShowTimer(true);
-      timer = setInterval(() => {
-        setElapsedTime(prev => Math.min(prev + 1, 30));
-      }, 1000);
-    }
-    
-    return () => {
-      clearInterval(timer);
-      setElapsedTime(0);
-      setShowTimer(false);
-    };
-  }, [isGenerating, imageState.url]);
 
   useEffect(() => {
     if (generatedImage) {
@@ -158,6 +238,125 @@ const ThumbnailPreview: React.FC<ThumbnailPreviewProps> = ({
     e.currentTarget.classList.remove('drop-target');
   };
 
+  const handleElementSelect = (elementId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedElement(elementId);
+    setEditingElement(null);
+  };
+
+  const handleElementDoubleClick = (elementId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const element = elements.find(el => el.id === elementId);
+    if (element?.type === 'text') {
+      setEditingElement(elementId);
+      setSelectedElement(null);
+    }
+  };
+
+  const handleResizeStart = (elementId: string, handle: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setResizing({ elementId, handle });
+  };
+
+  const handleResizeMove = (e: MouseEvent) => {
+    if (!resizing) return;
+    
+    const element = elements.find(el => el.id === resizing.elementId);
+    if (!element) return;
+
+    const deltaX = e.movementX;
+    const deltaY = e.movementY;
+    
+    const updatedElements = thumbnailElements.map(el => {
+      if (el.id === resizing.elementId) {
+        let newSize = el.size || 16;
+        
+        if (resizing.handle.includes('right') || resizing.handle.includes('left')) {
+          newSize += deltaX * 0.5;
+        }
+        if (resizing.handle.includes('bottom') || resizing.handle.includes('top')) {
+          newSize += deltaY * 0.5;
+        }
+        
+        return { ...el, size: Math.max(8, Math.min(200, newSize)) };
+      }
+      return el;
+    });
+    
+    setThumbnailElements(updatedElements);
+  };
+
+  const handleResizeEnd = () => {
+    setResizing(null);
+  };
+
+  useEffect(() => {
+    if (resizing) {
+      document.addEventListener('mousemove', handleResizeMove);
+      document.addEventListener('mouseup', handleResizeEnd);
+      
+      return () => {
+        document.removeEventListener('mousemove', handleResizeMove);
+        document.removeEventListener('mouseup', handleResizeEnd);
+      };
+    }
+  }, [resizing]);
+
+  // Click outside to deselect
+  const handleCanvasClick = (e: React.MouseEvent) => {
+    if (e.target === e.currentTarget) {
+      setSelectedElement(null);
+      setEditingElement(null);
+    }
+  };
+
+  // Delete selected element
+  const handleDeleteElement = (elementId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const updatedElements = thumbnailElements.filter(el => el.id !== elementId);
+    setThumbnailElements(updatedElements);
+    setSelectedElement(null);
+  };
+
+  // Duplicate selected element
+  const handleDuplicateElement = (elementId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const element = thumbnailElements.find(el => el.id === elementId);
+    if (!element) return;
+    
+    const duplicatedElement = {
+      ...element,
+      id: `${element.type}-${Date.now()}`,
+      x: Math.min(element.x + 10, 90), // Offset slightly
+      y: Math.min(element.y + 10, 90)
+    };
+    
+    setThumbnailElements([...thumbnailElements, duplicatedElement]);
+    setSelectedElement(duplicatedElement.id);
+  };
+
+  // Keyboard controls
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!selectedElement) return;
+      
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault();
+        const updatedElements = thumbnailElements.filter(el => el.id !== selectedElement);
+        setThumbnailElements(updatedElements);
+        setSelectedElement(null);
+      }
+      
+      if (e.key === 'Escape') {
+        setSelectedElement(null);
+        setEditingElement(null);
+      }
+    };
+    
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [selectedElement, thumbnailElements, setThumbnailElements]);
+
   return (
     <div 
       className="relative" 
@@ -165,6 +364,8 @@ const ThumbnailPreview: React.FC<ThumbnailPreviewProps> = ({
       onDrop={handleDrop}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
+      onClick={handleCanvasClick}
+      data-thumbnail-preview
     >
       <div className="absolute inset-0 bg-black rounded-lg overflow-hidden shadow-xl">
         {/* Generated image (always at the bottom) */}
@@ -179,15 +380,66 @@ const ThumbnailPreview: React.FC<ThumbnailPreviewProps> = ({
           </div>
         )}
         
-        {isGenerating && showTimer && (
+        {isGenerating && (
           <div className="absolute inset-0 z-40 bg-black bg-opacity-80 backdrop-blur-sm flex items-center justify-center">
             <div className="text-center">
-              <div className="relative">
-                <div className="w-16 h-16 border-4 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
+              <div className="relative mb-6">
+                {/* Animated progress ring */}
+                <svg className="w-20 h-20 transform -rotate-90" viewBox="0 0 100 100">
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r="40"
+                    stroke="rgba(139, 92, 246, 0.2)"
+                    strokeWidth="8"
+                    fill="none"
+                  />
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r="40"
+                    stroke="rgb(139, 92, 246)"
+                    strokeWidth="8"
+                    fill="none"
+                    strokeLinecap="round"
+                    strokeDasharray={`${2 * Math.PI * 40}`}
+                    strokeDashoffset={`${2 * Math.PI * 40 * (1 - progressState.progress / 100)}`}
+                    className="transition-all duration-300 ease-out"
+                  />
+                </svg>
+                
+                {/* Progress percentage */}
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <span className="text-lg font-bold text-purple-400">
+                    {progressState.progress}%
+                  </span>
+                </div>
+                
+                {/* Sparkles animation */}
                 <Sparkles className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-8 w-8 text-purple-400 animate-pulse" />
               </div>
-              <p className="mt-4 text-lg font-medium text-white">Generating Thumbnail ({elapsedTime}/30s)</p>
-              <p className="mt-2 text-sm text-gray-400">Creating something amazing...</p>
+              
+              <p className="text-lg font-medium text-white mb-2">{progressState.stage}</p>
+              
+              {progressState.estimatedTime > 0 && (
+                <p className="text-sm text-gray-400">
+                  ~{progressState.estimatedTime}s remaining
+                </p>
+              )}
+              
+              {/* Cost optimization indicator */}
+              <div className="mt-4 px-3 py-1 bg-purple-900/40 rounded-full text-xs text-purple-300">
+                {(() => {
+                  const { generationSettings } = useVideoStore.getState();
+                  const cost = generationSettings?.costOptimization || 'standard';
+                  const labels = {
+                    economy: 'Economy Mode • Faster Generation',
+                    standard: 'Standard Quality • Balanced Speed',
+                    premium: 'Premium Quality • Enhanced Detail'
+                  };
+                  return labels[cost as keyof typeof labels];
+                })()}
+              </div>
             </div>
           </div>
         )}
@@ -257,12 +509,8 @@ const ThumbnailPreview: React.FC<ThumbnailPreviewProps> = ({
                 onDrag={(e) => handleDrag(e, index)}
                 onDragEnd={handleDragEnd}
                 onDragOver={(e) => e.preventDefault()}
-                onClick={(e) => {
-                  if (element.type === 'text') {
-                    e.stopPropagation();
-                    setEditingElement(element.id);
-                  }
-                }}
+                onClick={(e) => handleElementSelect(element.id, e)}
+                onDoubleClick={(e) => handleElementDoubleClick(element.id, e)}
               >
                 {element.type === 'text' ? (
                   editingElement === element.id ? (
@@ -277,6 +525,11 @@ const ThumbnailPreview: React.FC<ThumbnailPreviewProps> = ({
                           setThumbnailElements(updatedElements);
                         }}
                         onBlur={() => setEditingElement(null)}
+                        onKeyPress={(e) => {
+                          if (e.key === 'Enter') {
+                            setEditingElement(null);
+                          }
+                        }}
                         autoFocus
                         className="px-4 py-2 bg-black bg-opacity-70 rounded text-white border border-purple-500 focus:outline-none"
                         style={{ 
@@ -285,21 +538,76 @@ const ThumbnailPreview: React.FC<ThumbnailPreviewProps> = ({
                           width: `${Math.max(100, element.content.length * 12)}px`
                         }}
                       />
-                      <GripHorizontal className="absolute -top-6 left-1/2 -translate-x-1/2 h-4 w-4 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
                     </div>
                   ) : (
-                    <div 
-                      className={`px-4 py-2 bg-black bg-opacity-70 rounded text-white select-none cursor-text
-                        ${element.styles?.bold ? 'font-bold' : 'font-normal'}
-                        ${element.styles?.italic ? 'italic' : ''}
-                        ${element.styles?.underline ? 'underline' : ''}
-                        ${element.styles?.shadow ? 'drop-shadow-lg' : ''}
-                        text-${element.styles?.align || 'center'}`}
-                      style={{ 
-                        color: element.color || 'white',
-                        fontSize: `${element.size || 16}px` 
-                      }}
-                    >{element.content}</div>
+                    <div className="relative">
+                      <div 
+                        className={`relative group select-none
+                          ${element.styles?.bold ? 'font-bold' : 'font-normal'}
+                          ${element.styles?.italic ? 'italic' : ''}
+                          ${element.styles?.underline ? 'underline' : ''}
+                          ${element.styles?.shadow ? 'text-shadow-lg' : ''}
+                          text-${element.styles?.align || 'center'}`}
+                        style={{ 
+                          color: element.color || 'white',
+                          fontSize: `${element.size || 16}px`,
+                          textShadow: element.styles?.shadow ? '2px 2px 4px rgba(0,0,0,0.8), 0 0 8px rgba(0,0,0,0.6)' : 'none',
+                          fontWeight: element.styles?.bold ? 'bold' : 'normal',
+                          lineHeight: '1.2',
+                          padding: '0.25rem 0.5rem',
+                          background: 'transparent',
+                          border: 'none',
+                          borderRadius: '0',
+                          whiteSpace: 'nowrap',
+                          cursor: 'text'
+                        }}
+                      >
+                        {element.content}
+                        {/* Show edit hint only on hover */}
+                        <div className="absolute -top-7 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <div className="bg-black bg-opacity-80 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
+                            Double-click to edit
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* Selection and resize handles */}
+                      {selectedElement === element.id && (
+                        <div className="absolute inset-0 pointer-events-none">
+                          {/* Bounding box */}
+                          <div className="absolute inset-0 border-2 border-purple-500 border-dashed rounded pointer-events-none" 
+                               style={{ margin: '-4px' }} />
+                          
+                          {/* Control buttons */}
+                          <div className="absolute -top-8 left-0 flex space-x-1 pointer-events-auto">
+                            <button
+                              onClick={(e) => handleDuplicateElement(element.id, e)}
+                              className="w-6 h-6 bg-blue-500 hover:bg-blue-600 rounded text-white flex items-center justify-center transition-colors"
+                              title="Duplicate"
+                            >
+                              <Copy className="w-3 h-3" />
+                            </button>
+                            <button
+                              onClick={(e) => handleDeleteElement(element.id, e)}
+                              className="w-6 h-6 bg-red-500 hover:bg-red-600 rounded text-white flex items-center justify-center transition-colors"
+                              title="Delete (Del)"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                          
+                          {/* Resize handles */}
+                          <div className="absolute -top-1 -left-1 w-2 h-2 bg-purple-500 rounded-full cursor-nw-resize pointer-events-auto"
+                               onMouseDown={(e) => handleResizeStart(element.id, 'top-left', e)} />
+                          <div className="absolute -top-1 -right-1 w-2 h-2 bg-purple-500 rounded-full cursor-ne-resize pointer-events-auto"
+                               onMouseDown={(e) => handleResizeStart(element.id, 'top-right', e)} />
+                          <div className="absolute -bottom-1 -left-1 w-2 h-2 bg-purple-500 rounded-full cursor-sw-resize pointer-events-auto"
+                               onMouseDown={(e) => handleResizeStart(element.id, 'bottom-left', e)} />
+                          <div className="absolute -bottom-1 -right-1 w-2 h-2 bg-purple-500 rounded-full cursor-se-resize pointer-events-auto"
+                               onMouseDown={(e) => handleResizeStart(element.id, 'bottom-right', e)} />
+                        </div>
+                      )}
+                    </div>
                   )
                 ) : element.type === 'image' && element.url ? (
                   <div className="relative">
@@ -318,6 +626,44 @@ const ThumbnailPreview: React.FC<ThumbnailPreviewProps> = ({
                         ` : 'none'
                       }}
                     />
+                    
+                    {/* Selection and resize handles for images */}
+                    {selectedElement === element.id && (
+                      <div className="absolute inset-0 pointer-events-none">
+                        {/* Bounding box */}
+                        <div className="absolute inset-0 border-2 border-purple-500 border-dashed rounded pointer-events-none" 
+                             style={{ margin: '-4px' }} />
+                        
+                        {/* Control buttons */}
+                        <div className="absolute -top-8 left-0 flex space-x-1 pointer-events-auto">
+                          <button
+                            onClick={(e) => handleDuplicateElement(element.id, e)}
+                            className="w-6 h-6 bg-blue-500 hover:bg-blue-600 rounded text-white flex items-center justify-center transition-colors"
+                            title="Duplicate"
+                          >
+                            <Copy className="w-3 h-3" />
+                          </button>
+                          <button
+                            onClick={(e) => handleDeleteElement(element.id, e)}
+                            className="w-6 h-6 bg-red-500 hover:bg-red-600 rounded text-white flex items-center justify-center transition-colors"
+                            title="Delete (Del)"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                        
+                        {/* Resize handles */}
+                        <div className="absolute -top-1 -left-1 w-3 h-3 bg-purple-500 rounded-full cursor-nw-resize pointer-events-auto"
+                             onMouseDown={(e) => handleResizeStart(element.id, 'top-left', e)} />
+                        <div className="absolute -top-1 -right-1 w-3 h-3 bg-purple-500 rounded-full cursor-ne-resize pointer-events-auto"
+                             onMouseDown={(e) => handleResizeStart(element.id, 'top-right', e)} />
+                        <div className="absolute -bottom-1 -left-1 w-3 h-3 bg-purple-500 rounded-full cursor-sw-resize pointer-events-auto"
+                             onMouseDown={(e) => handleResizeStart(element.id, 'bottom-left', e)} />
+                        <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-purple-500 rounded-full cursor-se-resize pointer-events-auto"
+                             onMouseDown={(e) => handleResizeStart(element.id, 'bottom-right', e)} />
+                      </div>
+                    )}
+                    
                     <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
                       <Move className="h-8 w-8 text-white drop-shadow-lg" />
                     </div>

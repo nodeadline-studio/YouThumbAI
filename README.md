@@ -60,19 +60,19 @@ src/
 - YouTube Data API key
 
 ### Setup
-```bash
+   ```bash
 # Clone and install
 git clone <repo-url>
 cd YouThumbAI
-npm install
+   npm install
 
 # Configure environment
 cp env.example .env
 # Add your API keys to .env
 
 # Start development
-npm run dev
-```
+   npm run dev
+   ```
 
 ### First Thumbnail
 1. Open http://localhost:5173

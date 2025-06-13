@@ -21,6 +21,8 @@ export interface GenerationOptions {
   creatorType?: CreatorType | null;
   participants?: Participant[];
   enableFaceSwap?: boolean;
+  previewImage?: string;
+  blendMode?: boolean;
 }
 
 const STYLE_VARIATIONS = [
@@ -77,111 +79,113 @@ export const generateThumbnail = async (
   options: GenerationOptions
 ): Promise<ThumbnailVariation[]> => {
   try {
-    // Determine which style variations to use based on the creative direction
-    let stylesToUse = STYLE_VARIATIONS;
+    // Choose appropriate styles based on user's creative direction
+    let selectedStyles = STYLE_VARIATIONS;
     if (options.creativeDirection) {
       switch(options.creativeDirection) {
         case 'original':
-          stylesToUse = [STYLE_VARIATIONS[0]];
+          selectedStyles = [STYLE_VARIATIONS[0]];
           break;
         case 'dynamic':
-          stylesToUse = [STYLE_VARIATIONS[1]];
+          selectedStyles = [STYLE_VARIATIONS[1]];
           break;
         case 'artistic':
-          stylesToUse = [STYLE_VARIATIONS[2]];
+          selectedStyles = [STYLE_VARIATIONS[2]];
           break;
         case 'gaming':
-          stylesToUse = [STYLE_VARIATIONS[3]];
+          selectedStyles = [STYLE_VARIATIONS[3]];
           break;
         case 'tutorial':
-          stylesToUse = [STYLE_VARIATIONS[4]];
+          selectedStyles = [STYLE_VARIATIONS[4]];
           break;
         case 'vlog':
-          stylesToUse = [STYLE_VARIATIONS[5]];
+          selectedStyles = [STYLE_VARIATIONS[5]];
           break;
         case 'business':
-          stylesToUse = [STYLE_VARIATIONS[6]];
+          selectedStyles = [STYLE_VARIATIONS[6]];
           break;
         case 'entertainment':
-          stylesToUse = [STYLE_VARIATIONS[7]];
+          selectedStyles = [STYLE_VARIATIONS[7]];
           break;
         default:
-          stylesToUse = STYLE_VARIATIONS.slice(0, options.variationCount || 1);
+          selectedStyles = STYLE_VARIATIONS.slice(0, options.variationCount || 1);
       }
     } else {
-      stylesToUse = STYLE_VARIATIONS.slice(0, options.variationCount || 1);
+      selectedStyles = STYLE_VARIATIONS.slice(0, options.variationCount || 1);
     }
     
-    const results = await Promise.all(
-      stylesToUse.map(async (variation) => {
-        // Adjust style based on language and cultural context
-        const culturalContext = getCulturalContext(videoData.language.code);
-        
-        // Adjust style based on consistency setting
-        const styleWeight = (options.styleConsistency || 100) / 100;
-        
-        const styleProfile = options.selectedReferenceThumbnails?.length
-          ? await buildStyleProfile(options.selectedReferenceThumbnails)
-          : null;
+    const thumbnailPromises = selectedStyles.map(async (styleVariation) => {
+      // Build cultural context for international content
+      const culturalAdaptation = getCulturalContext(videoData.language.code);
+      
+      // Apply user's style consistency preferences
+      const styleIntensity = (options.styleConsistency || 100) / 100;
+      
+      // Incorporate reference thumbnails if provided
+      const channelStyleProfile = options.selectedReferenceThumbnails?.length
+        ? await buildStyleProfile(options.selectedReferenceThumbnails)
+        : null;
 
-        const prompt = await buildPrompt(
-          videoData,
-          options.contextSummary || '',
-          variation,
-          styleProfile,
-          options.clickbaitIntensity,
-          styleWeight,
-          culturalContext,
-          options.creatorType || null,
-          options.participants || []
-        );
-
-        // Adjust quality based on cost optimization setting
-        const quality = getQualityByCostSetting(options.costOptimization || 'standard');
-
-        const response = await openai.images.generate({
-          model: 'dall-e-3',
-          prompt,
-          n: 1,
-          size: "1792x1024",
-          quality,
-          style: "vivid"
-        });
-
-        // Handle possible undefined response data
-        if (!response.data?.[0]?.url) {
-          throw new Error(`Failed to generate ${variation.label} variation`);
+      const visualPrompt = await buildPrompt(
+        videoData,
+        options.contextSummary || '',
+        styleVariation,
+        channelStyleProfile,
+        options.clickbaitIntensity,
+        styleIntensity,
+        culturalAdaptation,
+        options.creatorType || null,
+        options.participants || [],
+        { 
+          blendMode: options.blendMode, 
+          elements: elements.length > 0 ? elements : undefined 
         }
+      );
 
-        let finalImageUrl = response.data[0].url;
+      // Select image quality based on budget preferences
+      const imageQuality = getQualityByCostSetting(options.costOptimization || 'standard');
 
-        // Apply face swap if enabled and Replicate is configured
-        if (options.enableFaceSwap && isReplicateConfigured() && videoData.thumbnailUrl) {
-          try {
-            console.log(`Applying face swap for ${variation.label} variation`);
-            finalImageUrl = await generateThumbnailWithFaceSwap(
-              videoData,
-              response.data[0].url,
-              true
-            );
-            console.log(`Face swap completed for ${variation.label}`);
-          } catch (faceSwapError) {
-            console.warn(`Face swap failed for ${variation.label}, using original:`, faceSwapError);
-            // Keep the original DALL-E generated image if face swap fails
-          }
+      const dalleResponse = await openai.images.generate({
+        model: 'dall-e-3',
+        prompt: visualPrompt,
+        n: 1,
+        size: "1792x1024",
+        quality: imageQuality,
+        style: "vivid"
+      });
+
+      // Ensure we got a valid response
+      if (!dalleResponse.data?.[0]?.url) {
+        throw new Error(`Failed to generate ${styleVariation.label} variation`);
+      }
+
+      let finalThumbnailUrl = dalleResponse.data[0].url;
+
+      // Apply face swap enhancement if available and requested
+      if (options.enableFaceSwap && isReplicateConfigured() && videoData.thumbnailUrl) {
+        try {
+          finalThumbnailUrl = await generateThumbnailWithFaceSwap(
+            videoData,
+            dalleResponse.data[0].url,
+            true
+          );
+        } catch (faceSwapError) {
+          // Gracefully fall back to original generated image
+          // Face swap is an enhancement, not a requirement
         }
+      }
 
-        return {
-          url: finalImageUrl,
-          label: variation.label + (options.enableFaceSwap && isReplicateConfigured() ? ' (with face swap)' : ''),
-          prompt: prompt
-        };
-      })
-    );
-    return results;
+      return {
+        url: finalThumbnailUrl,
+        label: styleVariation.label + (options.enableFaceSwap && isReplicateConfigured() ? ' (with face swap)' : ''),
+        prompt: visualPrompt
+      };
+    });
+    
+    const generatedThumbnails = await Promise.all(thumbnailPromises);
+    return generatedThumbnails;
 
   } catch (error) {
-    console.error('DALL-E API Error:', error);
     throw new Error('Failed to generate thumbnail. Please try again.');
   }
 };
@@ -282,7 +286,8 @@ async function buildPrompt(
   styleWeight: number,
   culturalContext: string,
   creatorType: CreatorType | null,
-  participants: Participant[]
+  participants: Participant[],
+  options?: { blendMode?: boolean; elements?: ThumbnailElement[] }
 ): Promise<string> {
   // Generate focused creative direction
   const creativePrompt = await openai.chat.completions.create({
@@ -298,6 +303,10 @@ Focus on concrete visual elements and avoid generic descriptions. Consider:
 - Lighting and atmosphere
 - Color relationships
 - Visual hierarchy
+
+${options?.blendMode ? `
+ELEMENT INTEGRATION MODE: You must naturally integrate existing overlay elements into the scene design. These elements should appear as if they were originally part of the photograph/artwork, not added as overlays. Make text look like it's painted, carved, or burned into surfaces. Make graphic elements feel native to the environment.
+` : ''}
 
 Maintain a balance between accuracy and creativity based on the style weight: ${styleWeight * 100}%
 - 100%: Exact match to reference
@@ -320,16 +329,29 @@ Cultural Context: ${culturalContext}
 
 ${participants.length > 0 ? getParticipantPlacement(participants) : ''}
 
+${options?.blendMode && options?.elements ? `
+INTEGRATE THESE ELEMENTS NATURALLY:
+${options.elements.map(el => {
+  if (el.type === 'text') {
+    return `- Text "${el.content}" positioned at ${el.x}%, ${el.y}% (${el.size}px, ${el.color}) - integrate this text as if it's part of the scene (painted on surface, carved in material, etc.)`;
+  } else if (el.type === 'image') {
+    return `- Visual element at ${el.x}%, ${el.y}% (${el.size}px) - blend this naturally into the environment`;
+  }
+  return '';
+}).filter(Boolean).join('\n')}
+` : ''}
+
 Requirements:
 - Focus on the main subject/action
 - Include specific visual details
 - Describe composition and lighting
-- Keep it concise (50 words max)
-- NO text or UI elements
-- NO generic stock photo looks`
+- Keep it concise (${options?.blendMode ? '75' : '50'} words max)
+- NO text or UI elements ${options?.blendMode ? '(except the integrated elements above)' : ''}
+- NO generic stock photo looks
+${options?.blendMode ? '- Make integrated elements feel like original parts of the scene' : ''}`
       }
     ],
-    max_tokens: 100,
+    max_tokens: options?.blendMode ? 150 : 100,
     temperature: 0.7
   });
 
@@ -356,12 +378,13 @@ Technical Specifications:
 ${styleProfile ? `- Match channel style: ${styleProfile.tone}` : ''}
 
 Critical Constraints:
-- NO text overlays or typography
+- NO text overlays or typography ${options?.blendMode ? '(except naturally integrated elements)' : ''}
 - NO user interface elements
 - NO watermarks or logos
 - NO stock photo aesthetics
 - NO AI-generated artifacts
 - NO generic or cliché compositions
+${options?.blendMode ? '- Make all elements appear naturally part of the original scene' : ''}
 
 Composition Guidelines:
 ${getCompositionGuidelines(clickbaitIntensity)}

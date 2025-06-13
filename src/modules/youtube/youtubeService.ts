@@ -17,7 +17,7 @@ export const fetchVideoData = async (url: string): Promise<VideoData> => {
   try {
     const videoData = await fetchVideoMetadata(videoId, API_KEY);
     
-    // Get or generate dictionary
+    // Get or generate dictionary for this channel
     let dictionary = getDictionary(videoData.channelId!);
     if (!dictionary) {
       dictionary = generateDictionary([videoData]);
@@ -26,15 +26,14 @@ export const fetchVideoData = async (url: string): Promise<VideoData> => {
       }
     }
     
-    // Generate context summary
-    const contextSummary = await generateContextSummary(videoData, dictionary.keywords);
+    // Generate enhanced context summary
+    const contextSummary = await generateContextSummary(videoData, dictionary);
     
     setContextSummary(contextSummary);
     setDictionary(dictionary.keywords);
     
     return videoData;
   } catch (error) {
-    console.error('YouTube API Error:', error);
     throw new Error('Failed to fetch video data. Please check the URL and try again.');
   }
 };

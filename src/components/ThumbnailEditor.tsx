@@ -4,7 +4,8 @@ import ThumbnailPreview from './ThumbnailPreview';
 import ThumbnailControls from './ThumbnailControls';
 import ElementLibrary from './ElementLibrary';
 import BatchExportPanel from './BatchExportPanel';
-import { Sparkles, Download, Loader2, RefreshCw, Library, Sliders, Users, Image, Settings, Type, Blend } from 'lucide-react';
+import VideoInput from './VideoInput';
+import { Sparkles, Download, Loader2, RefreshCw, Library, Sliders, Users, Image, Settings, Type, Blend, Youtube, Link } from 'lucide-react';
 import { saveAs } from 'file-saver';
 import { generateThumbnail } from '../modules/ai/dalleService';
 import { Tabs, TabList, Tab, TabPanel } from './Tabs';
@@ -14,6 +15,7 @@ import CreatorTypeSelector from './CreatorTypeSelector';
 import CostOptimizationPanel from './CostOptimizationPanel';
 import GenerationPanel from './GenerationPanel';
 import { ThumbnailElement, ThumbnailElementType } from '../types';
+import { getVideoMetadata, extractVideoId } from '../lib/youtubeApi';
 
 interface ThumbnailVariation {
   url: string;
@@ -23,6 +25,7 @@ interface ThumbnailVariation {
 const ThumbnailEditor: React.FC = () => {
   const { 
     videoData, 
+    setVideoData,
     thumbnailElements, 
     setThumbnailElements, 
     contextSummary, 
@@ -44,7 +47,10 @@ const ThumbnailEditor: React.FC = () => {
   const [blendRegenerating, setBlendRegenerating] = useState(false);
   const [selectedElementId, setSelectedElementId] = useState<string | null>(null);
   const [showElementControls, setShowElementControls] = useState(false);
-  const [activeTab, setActiveTab] = useState<string>('elements');
+  const [activeTab, setActiveTab] = useState<string>(videoData ? 'elements' : 'video');
+  const [videoUrl, setVideoUrl] = useState('');
+  const [loadingVideo, setLoadingVideo] = useState(false);
+  const [showAdvancedAnalyzer, setShowAdvancedAnalyzer] = useState(false);
 
   const handleEditElement = (id: string) => {
     setSelectedElementId(id);
@@ -59,6 +65,61 @@ const ThumbnailEditor: React.FC = () => {
   const handleCloseElementControls = () => {
     setSelectedElementId(null);
     setShowElementControls(false);
+  };
+
+  const handleVideoLoad = async () => {
+    if (!videoUrl.trim()) return;
+
+    setLoadingVideo(true);
+    try {
+      const videoId = extractVideoId(videoUrl);
+      if (!videoId) {
+        throw new Error('Invalid YouTube URL');
+      }
+
+      const apiKey = import.meta.env.VITE_YOUTUBE_API_KEY;
+      if (!apiKey) {
+        throw new Error('YouTube API key not configured');
+      }
+
+      const videoDataResult = await getVideoMetadata(videoId, apiKey);
+      setVideoData(videoDataResult);
+      setVideoUrl('');
+      setActiveTab('elements'); // Switch to elements tab after loading
+    } catch (error) {
+      console.error('Error loading video:', error);
+      alert('Failed to load video. Please check the URL and try again.');
+    } finally {
+      setLoadingVideo(false);
+    }
+  };
+
+  const handleCreateBlankTemplate = () => {
+    // Create a blank template with minimal data
+    const blankTemplate = {
+      id: 'blank-template',
+      title: 'Custom Thumbnail',
+      description: 'Create your custom thumbnail from scratch',
+      channelTitle: 'Custom Creator',
+      publishedAt: new Date().toISOString(),
+      duration: '0:00',
+      viewCount: '0',
+      likeCount: '0',
+      commentCount: '0',
+      thumbnailUrl: '',
+      channelId: 'blank',
+      tags: ['custom'],
+      categoryId: '0',
+      language: { code: 'en', name: 'English', direction: 'ltr' as const },
+      isLiveContent: false,
+      typography: {
+        direction: 'ltr' as const,
+        fontFamily: 'Arial, sans-serif'
+      }
+    };
+    
+    setVideoData(blankTemplate);
+    setActiveTab('elements'); // Switch to elements tab after creating blank
   };
 
   const handleRegenerate = async () => {
@@ -297,6 +358,13 @@ const ThumbnailEditor: React.FC = () => {
     return 'right';
   };
 
+  // Show advanced analyzer if requested
+  if (showAdvancedAnalyzer) {
+    return (
+      <VideoInput onClose={() => setShowAdvancedAnalyzer(false)} />
+    );
+  }
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 min-h-[calc(100vh-12rem)]">
       <div className="lg:col-span-3 order-2 lg:order-1">
@@ -324,16 +392,78 @@ const ThumbnailEditor: React.FC = () => {
             </div>
           )}
           
-          <ThumbnailPreview 
-            videoTitle={thumbnailElements.length > 0 ? '' : videoData.title}
-            videoTypography={videoData.typography}
-            elements={thumbnailElements} 
-            onElementsChange={setThumbnailElements}
-            generatedImage={selectedVariation !== -1 ? variations[selectedVariation].url : null}
-            isGenerating={generating}
-            onDrop={handleCanvasDrop}
-            data-thumbnail-preview
-          />
+          {videoData ? (
+            <ThumbnailPreview 
+              videoTitle={thumbnailElements.length > 0 ? '' : videoData.title}
+              videoTypography={videoData.typography}
+              elements={thumbnailElements} 
+              onElementsChange={setThumbnailElements}
+              generatedImage={selectedVariation !== -1 ? variations[selectedVariation].url : null}
+              isGenerating={generating}
+              onDrop={handleCanvasDrop}
+              data-thumbnail-preview
+            />
+          ) : (
+            <div className="bg-gray-800 bg-opacity-60 backdrop-blur-lg rounded-xl border border-gray-700 p-8 text-center">
+              <div className="max-w-lg mx-auto">
+                <Image className="w-16 h-16 text-gray-500 mx-auto mb-6" />
+                <h2 className="text-2xl font-bold mb-4 bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
+                  Thumbnail Studio
+                </h2>
+                <p className="text-gray-400 mb-8 leading-relaxed">
+                  Create professional thumbnails with AI-powered design. Start with a blank canvas or load a YouTube video.
+                </p>
+                
+                <div className="flex flex-col sm:flex-row gap-4 mb-8">
+                  <button 
+                    onClick={handleCreateBlankTemplate}
+                    className="flex-1 px-6 py-4 bg-gradient-to-r from-purple-600 to-blue-500 hover:from-purple-700 hover:to-blue-600 rounded-lg text-white font-medium transition-all duration-300 transform hover:scale-105"
+                  >
+                    <Image className="w-5 h-5 mx-auto mb-2" />
+                    Start with Blank Canvas
+                  </button>
+                  
+                  <button 
+                    onClick={() => setActiveTab('video')}
+                    className="flex-1 px-6 py-4 bg-gray-700 hover:bg-gray-600 rounded-lg text-white font-medium transition-all duration-300"
+                  >
+                    <Youtube className="w-5 h-5 mx-auto mb-2" />
+                    Load YouTube Video
+                  </button>
+                </div>
+                
+                <div className="mt-8 grid grid-cols-3 gap-4 text-sm text-gray-400">
+                  <div className="text-center">
+                    <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-2">
+                      <span className="text-white font-bold text-xs">1</span>
+                    </div>
+                    <p>Start Creating</p>
+                  </div>
+                  <div className="text-center">
+                    <div className="w-8 h-8 bg-purple-500 rounded-full flex items-center justify-center mx-auto mb-2">
+                      <span className="text-white font-bold text-xs">2</span>
+                    </div>
+                    <p>Design & AI</p>
+                  </div>
+                  <div className="text-center">
+                    <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center mx-auto mb-2">
+                      <span className="text-white font-bold text-xs">3</span>
+                    </div>
+                    <p>Export</p>
+                  </div>
+                </div>
+
+                <div className="mt-8 pt-6 border-t border-gray-700">
+                  <button 
+                    onClick={() => setShowAdvancedAnalyzer(true)}
+                    className="text-sm text-purple-400 hover:text-purple-300 transition-colors"
+                  >
+                    Need advanced options? Use full analyzer →
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
           
           <div className="mt-6 flex flex-wrap gap-4 justify-center">
             <div className="flex items-center gap-2 mr-4">
@@ -407,9 +537,9 @@ const ThumbnailEditor: React.FC = () => {
               </>
             )}
 
-            {/* NEW BUTTON: Regenerate WITH Elements */}
-            {thumbnailElements.length > 0 && (
-              <div className="relative">
+            {/* FIXED: Blend Elements button only shows after generation AND when elements exist */}
+            {thumbnailElements.length > 0 && variations.length > 0 && selectedVariation !== -1 && (
+              <div className="relative group">
                 <button
                   className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white px-6 py-2 rounded-lg font-medium flex items-center justify-center transition-all duration-300 transform hover:scale-105"
                   onClick={handleRegenerateWithElements}
@@ -429,23 +559,25 @@ const ThumbnailEditor: React.FC = () => {
                   )}
                 </button>
                 
-                {/* Tooltip */}
-                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-2 bg-black bg-opacity-90 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                  <div className="font-semibold mb-1">🎨 Blend Elements</div>
-                  <div>Captures your current preview and regenerates the image with text/shapes naturally integrated into the scene - making them look like they belong in the original photo!</div>
+                {/* Enhanced Tooltip */}
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-3 bg-black bg-opacity-95 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
+                  <div className="font-semibold mb-2 text-purple-300">🎨 Blend Elements</div>
+                  <div className="text-gray-200 leading-relaxed">
+                    Captures your current preview and regenerates the image with text/shapes naturally integrated into the scene - making them look like they belong in the original photo!
+                  </div>
                   <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-black"></div>
                 </div>
               </div>
             )}
 
-            {/* Help text for blend feature */}
-            {thumbnailElements.length > 0 && !blendRegenerating && (
-              <div className="w-full mt-4 p-3 bg-gradient-to-r from-purple-900/30 to-pink-900/30 border border-purple-500/30 rounded-lg">
-                <div className="flex items-start space-x-2">
-                  <Sparkles className="w-4 h-4 text-purple-400 mt-0.5 flex-shrink-0" />
+            {/* Enhanced Help text for blend feature */}
+            {thumbnailElements.length > 0 && variations.length > 0 && selectedVariation !== -1 && !blendRegenerating && (
+              <div className="w-full mt-4 p-4 bg-gradient-to-r from-purple-900/30 to-pink-900/30 border border-purple-500/30 rounded-lg">
+                <div className="flex items-start space-x-3">
+                  <Sparkles className="w-5 h-5 text-purple-400 mt-0.5 flex-shrink-0" />
                   <div className="text-sm">
-                    <div className="font-medium text-purple-300 mb-1">Pro Tip: Blend Elements</div>
-                    <div className="text-gray-300">
+                    <div className="font-semibold text-purple-300 mb-2">Pro Tip: Blend Elements</div>
+                    <div className="text-gray-300 leading-relaxed">
                       Use "Blend Elements" to make your text and graphics look naturally integrated into the scene - 
                       as if they were painted, carved, or originally part of the image. Perfect for professional-looking thumbnails!
                     </div>
@@ -461,40 +593,158 @@ const ThumbnailEditor: React.FC = () => {
         <div className="bg-gray-800 bg-opacity-60 backdrop-blur-lg rounded-xl border border-gray-700 overflow-hidden">
           <Tabs defaultTab={activeTab} onChange={setActiveTab}>
             <TabList>
+              {!videoData && (
+                <Tab id="video">
+                  <Youtube className="w-4 h-4 mr-1" />
+                  <span className="text-xs">Video</span>
+                </Tab>
+              )}
               <Tab id="elements">
-                <Library className="w-5 h-5 mr-1" />
-                Elements
+                <Library className="w-4 h-4 mr-1" />
+                <span className="text-xs">Elements</span>
               </Tab>
               <Tab id="people">
-                <Users className="w-5 h-5 mr-1" />
-                People
+                <Users className="w-4 h-4 mr-1" />
+                <span className="text-xs">People</span>
               </Tab>
               <Tab id="settings">
-                <Settings className="w-5 h-5 mr-1" />
-                Settings
+                <Settings className="w-4 h-4 mr-1" />
+                <span className="text-xs">Settings</span>
               </Tab>
               <Tab id="export">
-                <Download className="w-5 h-5 mr-1" />
-                Export
+                <Download className="w-4 h-4 mr-1" />
+                <span className="text-xs">Export</span>
               </Tab>
               <Tab id="generate">
-                <Sparkles className="w-5 h-5 mr-1" />
-                Generate
+                <Sparkles className="w-4 h-4 mr-1" />
+                <span className="text-xs">Generate</span>
               </Tab>
             </TabList>
             
+            {!videoData && (
+              <TabPanel id="video">
+                <div className="p-4">
+                  <div className="text-center mb-6">
+                    <h3 className="text-lg font-semibold mb-2 text-gray-200">Start Creating</h3>
+                    <p className="text-sm text-gray-400">Choose how you want to begin your thumbnail</p>
+                  </div>
+                  
+                  <div className="space-y-4">
+                    {/* Blank Canvas Option - Primary */}
+                    <div className="bg-gradient-to-r from-purple-600/20 to-blue-600/20 border border-purple-500/30 rounded-lg p-4">
+                      <div className="text-center mb-3">
+                        <div className="w-12 h-12 bg-gradient-to-r from-purple-600 to-blue-500 rounded-full flex items-center justify-center mx-auto mb-3">
+                          <Image className="w-6 h-6 text-white" />
+                        </div>
+                        <h4 className="font-semibold text-white mb-1">Start with Blank Canvas</h4>
+                        <p className="text-xs text-gray-300">Perfect for custom designs and creative freedom</p>
+                      </div>
+                      <button
+                        onClick={handleCreateBlankTemplate}
+                        className="w-full py-3 bg-gradient-to-r from-purple-600 to-blue-500 hover:from-purple-700 hover:to-blue-600 rounded-lg text-white font-medium transition-all duration-300 transform hover:scale-105"
+                      >
+                        Create Blank Thumbnail
+                      </button>
+                    </div>
+
+                    <div className="text-center text-sm text-gray-400">
+                      <span>or</span>
+                    </div>
+
+                    {/* YouTube Video Option */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                        Load from YouTube Video
+                      </label>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={videoUrl}
+                          onChange={(e) => setVideoUrl(e.target.value)}
+                          placeholder="https://youtube.com/watch?v=..."
+                          className="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:border-purple-500 focus:outline-none text-sm"
+                          disabled={loadingVideo}
+                          onKeyPress={(e) => e.key === 'Enter' && handleVideoLoad()}
+                        />
+                        <button
+                          onClick={handleVideoLoad}
+                          disabled={loadingVideo || !videoUrl.trim()}
+                          className="px-4 py-2 bg-gray-600 hover:bg-gray-700 disabled:bg-gray-600 rounded-lg text-white text-sm font-medium transition-colors"
+                        >
+                          {loadingVideo ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            'Load'
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                    
+                    <div className="pt-4 border-t border-gray-700">
+                      <div className="text-center">
+                        <button 
+                          onClick={() => setShowAdvancedAnalyzer(true)}
+                          className="text-sm text-purple-400 hover:text-purple-300 transition-colors"
+                        >
+                          Need advanced options? Use full analyzer →
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </TabPanel>
+            )}
+            
             <TabPanel id="elements">
               <div className="p-4">
-                <SubtitleGenerator />
-                <ElementLibrary onEditElement={handleEditElement} onSelectElement={(element: ThumbnailElement) => {
-                  setThumbnailElements([...thumbnailElements, element]);
-                }} />
+                {videoData ? (
+                  <>
+                    <SubtitleGenerator />
+                    <ElementLibrary onEditElement={handleEditElement} onSelectElement={(element: ThumbnailElement) => {
+                      setThumbnailElements([...thumbnailElements, element]);
+                    }} />
+                  </>
+                ) : (
+                  <div className="text-center py-8">
+                    <Image className="w-12 h-12 text-gray-500 mx-auto mb-4" />
+                    <h3 className="text-lg font-medium text-gray-300 mb-2">Start Creating</h3>
+                    <p className="text-sm text-gray-400 mb-4">Create a blank canvas or load a video to access elements</p>
+                    <div className="flex flex-col gap-2">
+                      <button 
+                        onClick={handleCreateBlankTemplate}
+                        className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-white text-sm font-medium transition-colors"
+                      >
+                        Start Blank Canvas
+                      </button>
+                      <button 
+                        onClick={() => setActiveTab('video')}
+                        className="px-4 py-2 bg-gray-600 hover:bg-gray-700 rounded-lg text-white text-sm font-medium transition-colors"
+                      >
+                        Load Video
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </TabPanel>
             
             <TabPanel id="people">
               <div className="p-4">
-                <PeopleExtractor />
+                {videoData ? (
+                  <PeopleExtractor />
+                ) : (
+                  <div className="text-center py-8">
+                    <Users className="w-12 h-12 text-gray-500 mx-auto mb-4" />
+                    <h3 className="text-lg font-medium text-gray-300 mb-2">No Video Loaded</h3>
+                    <p className="text-sm text-gray-400 mb-4">Load a YouTube video first to extract people</p>
+                    <button 
+                      onClick={() => setActiveTab('video')}
+                      className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-white text-sm font-medium transition-colors"
+                    >
+                      Load Video
+                    </button>
+                  </div>
+                )}
               </div>
             </TabPanel>
             

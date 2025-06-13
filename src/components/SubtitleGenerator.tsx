@@ -36,11 +36,11 @@ const SubtitleGenerator: React.FC = () => {
       
       // Only add full title if it's not too long
       if (title.length <= 60) {
-        result.push({
-          id: `segment-full-${Date.now()}`,
-          text: title,
-          style: 'title'
-        });
+      result.push({
+        id: `segment-full-${Date.now()}`,
+        text: title,
+        style: 'title'
+      });
       }
       
       // Smart phrase extraction - avoid single words and fragments
@@ -59,11 +59,11 @@ const SubtitleGenerator: React.FC = () => {
               !phrase.endsWith('to') && 
               !phrase.endsWith('the')) {
             
-            result.push({
+        result.push({
               id: `segment-phrase-${i}-${Date.now()}`,
               text: phrase,
-              style: 'subtitle'
-            });
+          style: 'subtitle'
+        });
           }
         }
       }
@@ -73,11 +73,11 @@ const SubtitleGenerator: React.FC = () => {
       if (numberMatches) {
         numberMatches.forEach(match => {
           if (match.length >= 2 || parseInt(match) <= 20) { // Avoid single random digits
-            result.push({
-              id: `segment-number-${match}-${Date.now()}`,
-              text: match,
-              style: 'number'
-            });
+          result.push({
+            id: `segment-number-${match}-${Date.now()}`,
+            text: match,
+            style: 'number'
+          });
           }
         });
       }
@@ -90,12 +90,12 @@ const SubtitleGenerator: React.FC = () => {
         );
         
         if (startsWithQuestion || title.toLowerCase().includes('how to')) {
-          const questionVersion = title.replace(/[.!]$/, '');
-          result.push({
-            id: `segment-question-${Date.now()}`,
-            text: `${questionVersion}?`,
-            style: 'question'
-          });
+        const questionVersion = title.replace(/[.!]$/, '');
+        result.push({
+          id: `segment-question-${Date.now()}`,
+          text: `${questionVersion}?`,
+          style: 'question'
+        });
         }
       }
       

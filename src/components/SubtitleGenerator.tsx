@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useVideoStore } from '../store/videoStore';
 import CollapsibleSection from './CollapsibleSection';
-import { Type, Scissors, Plus, Circle } from 'lucide-react';
+import { Type, Scissors, Plus, Circle, Sparkles, RefreshCw } from 'lucide-react';
+import { generateTitleSuggestions, generateElementsFromTitle, TitleSuggestions } from '../modules/ai/dalleService';
 
 interface SubtitleSegment {
   id: string;
@@ -10,10 +11,12 @@ interface SubtitleSegment {
 }
 
 const SubtitleGenerator: React.FC = () => {
-  const { videoData } = useVideoStore();
+  const { videoData, setThumbnailElements, thumbnailElements } = useVideoStore();
   const [segments, setSegments] = useState<SubtitleSegment[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [customText, setCustomText] = useState('');
+  const [titleSuggestions, setTitleSuggestions] = useState<TitleSuggestions | null>(null);
+  const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   
   // Generate subtitle segments when video data changes
   useEffect(() => {
@@ -180,12 +183,176 @@ const SubtitleGenerator: React.FC = () => {
     setCustomText('');
   };
 
+  // NEW: Generate AI-powered title suggestions
+  const generateAITitleSuggestions = async () => {
+    if (!videoData?.title) return;
+    
+    setIsGeneratingAI(true);
+    try {
+      const suggestions = await generateTitleSuggestions(
+        videoData.title,
+        videoData.language?.code || 'en',
+        5 // Default clickbait intensity
+      );
+      setTitleSuggestions(suggestions);
+    } catch (error) {
+      console.error('Error generating AI title suggestions:', error);
+    } finally {
+      setIsGeneratingAI(false);
+    }
+  };
+
+  // NEW: Auto-add optimized elements to canvas
+  const addOptimizedElementsToCanvas = async () => {
+    if (!titleSuggestions) return;
+    
+    try {
+      const newElements = await generateElementsFromTitle(titleSuggestions);
+      setThumbnailElements([...thumbnailElements, ...newElements]);
+    } catch (error) {
+      console.error('Error adding optimized elements:', error);
+    }
+  };
+
   return (
     <CollapsibleSection id="subtitle-generator" title="Title & Subtitles" defaultExpanded={true}>
       <div className="space-y-4">
         <p className="text-sm text-gray-400 mb-2">
           Drag and drop title elements onto your thumbnail
         </p>
+
+        {/* AI Title Optimization */}
+        {videoData?.title && videoData.title.length > 40 && (
+          <div data-testid="ai-title-optimization" className="bg-gradient-to-r from-purple-900/30 to-blue-900/30 p-4 rounded-lg border border-purple-500/30">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center">
+                <Sparkles className="h-4 w-4 mr-2 text-purple-400" />
+                <h4 className="text-sm font-medium text-purple-300">AI Title Optimization</h4>
+              </div>
+              <button
+                onClick={generateAITitleSuggestions}
+                disabled={isGeneratingAI}
+                className="flex items-center px-3 py-1 bg-purple-600 hover:bg-purple-500 disabled:bg-purple-800 rounded text-xs font-medium transition-colors"
+              >
+                {isGeneratingAI ? (
+                  <RefreshCw className="h-3 w-3 mr-1 animate-spin" />
+                ) : (
+                  <Sparkles className="h-3 w-3 mr-1" />
+                )}
+                {isGeneratingAI ? 'Optimizing...' : 'Optimize'}
+              </button>
+            </div>
+            
+            <p className="text-xs text-gray-400 mb-3">
+              Your title is {videoData.title.length} characters. AI can shorten it and suggest better elements.
+            </p>
+
+            {titleSuggestions && (
+              <div className="space-y-3">
+                {/* Optimized Title */}
+                <div className="bg-black/30 p-3 rounded border border-green-500/30">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs text-green-400 font-medium">✓ Optimized Title</span>
+                    <button
+                      onClick={addOptimizedElementsToCanvas}
+                      className="text-xs bg-green-600 hover:bg-green-500 px-2 py-1 rounded transition-colors"
+                    >
+                      Add to Canvas
+                    </button>
+                  </div>
+                  <div 
+                    data-testid="optimized-title"
+                    className="text-white font-medium cursor-move p-2 bg-green-900/20 rounded border border-green-500/20"
+                    draggable
+                    onDragStart={(e) => handleDragStart({
+                      id: 'ai-optimized',
+                      text: titleSuggestions.shortTitle,
+                      style: 'title'
+                    }, e)}
+                  >
+                    {titleSuggestions.shortTitle}
+                  </div>
+                </div>
+
+                {/* Subtitle */}
+                {titleSuggestions.subtitle && (
+                  <div className="bg-black/30 p-3 rounded border border-blue-500/30">
+                    <span className="text-xs text-blue-400 font-medium">Supporting Text</span>
+                    <div 
+                      className="text-gray-300 cursor-move p-2 bg-blue-900/20 rounded border border-blue-500/20 mt-1"
+                      draggable
+                      onDragStart={(e) => handleDragStart({
+                        id: 'ai-subtitle',
+                        text: titleSuggestions.subtitle!,
+                        style: 'subtitle'
+                      }, e)}
+                    >
+                      {titleSuggestions.subtitle}
+                    </div>
+                  </div>
+                )}
+
+                {/* Special Elements */}
+                <div className="grid grid-cols-2 gap-2">
+                  {titleSuggestions.elements.accent && (
+                    <div className="bg-yellow-900/20 p-2 rounded border border-yellow-500/30">
+                      <span className="text-xs text-yellow-400">Accent</span>
+                      <div 
+                        className="text-yellow-300 font-bold cursor-move p-1 bg-yellow-900/30 rounded mt-1 text-center"
+                        draggable
+                        onDragStart={(e) => handleDragStart({
+                          id: 'ai-accent',
+                          text: titleSuggestions.elements.accent!,
+                          style: 'highlight'
+                        }, e)}
+                      >
+                        {titleSuggestions.elements.accent}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {titleSuggestions.elements.number && (
+                    <div className="bg-blue-900/20 p-2 rounded border border-blue-500/30">
+                      <span className="text-xs text-blue-400">Number</span>
+                      <div 
+                        className="text-blue-300 font-bold cursor-move p-1 bg-blue-900/30 rounded mt-1 text-center text-lg"
+                        draggable
+                        onDragStart={(e) => handleDragStart({
+                          id: 'ai-number',
+                          text: titleSuggestions.elements.number!,
+                          style: 'number'
+                        }, e)}
+                      >
+                        {titleSuggestions.elements.number}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Alternative Titles */}
+                <div className="bg-black/30 p-3 rounded border border-gray-500/30">
+                  <span className="text-xs text-gray-400 font-medium">Alternative Versions</span>
+                  <div className="grid gap-1 mt-2">
+                    {titleSuggestions.alternatives.map((alt, index) => (
+                      <div 
+                        key={index}
+                        className="text-gray-300 cursor-move p-2 bg-gray-900/20 rounded border border-gray-500/20 hover:border-gray-400/30 transition-colors text-sm"
+                        draggable
+                        onDragStart={(e) => handleDragStart({
+                          id: `ai-alt-${index}`,
+                          text: alt,
+                          style: 'title'
+                        }, e)}
+                      >
+                        {alt}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
         
         {/* Video Title */}
         {videoData?.title && (

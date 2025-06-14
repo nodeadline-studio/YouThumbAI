@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ThumbnailElement } from '../types';
-import { Move, Sparkles, AlertCircle, GripHorizontal, X, RotateCw, Copy } from 'lucide-react';
+import { Move, Sparkles, AlertCircle, GripHorizontal, X, RotateCw, Copy, Type } from 'lucide-react';
 import { useVideoStore } from '../store/videoStore';
 
 interface ThumbnailPreviewProps {
@@ -515,96 +515,173 @@ const ThumbnailPreview: React.FC<ThumbnailPreviewProps> = ({
                 {element.type === 'text' ? (
                   editingElement === element.id ? (
                     <div className="relative group">
-                      <input
-                        type="text"
-                        value={element.content}
-                        onChange={(e) => {
-                          const updatedElements = thumbnailElements.map(el =>
-                            el.id === element.id ? { ...el, content: e.target.value } : el  
-                          );
-                          setThumbnailElements(updatedElements);
-                        }}
-                        onBlur={() => setEditingElement(null)}
-                        onKeyPress={(e) => {
-                          if (e.key === 'Enter') {
-                            setEditingElement(null);
-                          }
-                        }}
-                        autoFocus
-                        className="px-4 py-2 bg-black bg-opacity-70 rounded text-white border border-purple-500 focus:outline-none"
-                        style={{ 
-                          color: element.color || 'white',
-                          fontSize: `${element.size || 16}px`,
-                          width: `${Math.max(100, element.content.length * 12)}px`
-                        }}
-                      />
+                      {/* Enhanced Text Editor with Sticky Bounding Box */}
+                      <div className="relative">
+                        {/* Sticky Bounding Box */}
+                        <div 
+                          className="absolute inset-0 border-2 border-purple-400 bg-purple-900/20 rounded-lg backdrop-blur-sm"
+                          style={{
+                            minWidth: '200px',
+                            minHeight: '60px',
+                            padding: '8px',
+                            margin: '-8px'
+                          }}
+                        />
+                        
+                        {/* Multi-line Text Editor */}
+                        <textarea
+                          value={element.content}
+                          onChange={(e) => {
+                            const updatedElements = thumbnailElements.map(el =>
+                              el.id === element.id ? { ...el, content: e.target.value } : el  
+                            );
+                            setThumbnailElements(updatedElements);
+                          }}
+                          onBlur={() => setEditingElement(null)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && e.ctrlKey) {
+                              setEditingElement(null);
+                            }
+                            if (e.key === 'Escape') {
+                              setEditingElement(null);
+                            }
+                          }}
+                          autoFocus
+                          className="relative z-10 w-full min-w-[200px] min-h-[60px] px-4 py-2 bg-black/80 rounded-lg text-white border-2 border-purple-500 focus:outline-none focus:border-purple-400 resize-none overflow-hidden"
+                          style={{ 
+                            color: element.color || 'white',
+                            fontSize: `${element.size || 16}px`,
+                            fontWeight: element.styles?.bold ? 'bold' : 'normal',
+                            fontStyle: element.styles?.italic ? 'italic' : 'normal',
+                            textAlign: element.styles?.align || 'left',
+                            lineHeight: '1.4',
+                            fontFamily: 'system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji"',
+                            wordBreak: 'break-word',
+                            whiteSpace: 'pre-wrap'
+                          }}
+                          placeholder="Enter your text..."
+                          rows={Math.max(2, Math.ceil(element.content.length / 30))}
+                        />
+                        
+                        {/* Text Controls */}
+                        <div className="absolute -bottom-10 left-0 flex items-center space-x-2 bg-black/90 rounded-lg px-3 py-1 border border-purple-500/50">
+                          <span className="text-xs text-gray-400">
+                            {element.content.length} chars
+                          </span>
+                          <div className="w-px h-4 bg-gray-600" />
+                          <span className="text-xs text-purple-400">
+                            Ctrl+Enter to save • Esc to cancel
+                          </span>
+                        </div>
+                      </div>
                     </div>
                   ) : (
                     <div className="relative">
+                      {/* Enhanced Text Display with Word Highlighting */}
                       <div 
-                        className={`relative group select-none
+                        className={`relative group select-none cursor-text
                           ${element.styles?.bold ? 'font-bold' : 'font-normal'}
                           ${element.styles?.italic ? 'italic' : ''}
                           ${element.styles?.underline ? 'underline' : ''}
-                          ${element.styles?.shadow ? 'text-shadow-lg' : ''}
-                          text-${element.styles?.align || 'center'}`}
+                          ${element.styles?.shadow ? 'text-shadow-lg' : ''}`}
                         style={{ 
                           color: element.color || 'white',
                           fontSize: `${element.size || 16}px`,
                           textShadow: element.styles?.shadow ? '2px 2px 4px rgba(0,0,0,0.8), 0 0 8px rgba(0,0,0,0.6)' : 'none',
                           fontWeight: element.styles?.bold ? 'bold' : 'normal',
-                          lineHeight: '1.2',
-                          padding: '0.25rem 0.5rem',
+                          lineHeight: '1.4',
+                          padding: '0.5rem',
                           background: 'transparent',
                           border: 'none',
-                          borderRadius: '0',
-                          whiteSpace: 'nowrap',
-                          cursor: 'text'
+                          borderRadius: '4px',
+                          maxWidth: '400px',
+                          wordBreak: 'break-word',
+                          whiteSpace: 'pre-wrap',
+                          textAlign: element.styles?.align || 'left',
+                          fontFamily: 'system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji"'
                         }}
                       >
-                        {element.content}
-                        {/* Show edit hint only on hover */}
-                        <div className="absolute -top-7 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <div className="bg-black bg-opacity-80 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
-                            Double-click to edit
+                        {/* Word-by-word highlighting for better readability */}
+                        {element.content.split(' ').map((word, wordIndex) => (
+                          <span
+                            key={wordIndex}
+                            className="hover:bg-purple-500/20 hover:rounded px-1 transition-colors duration-150"
+                            style={{
+                              display: 'inline-block',
+                              margin: '0 2px'
+                            }}
+                          >
+                            {word}
+                          </span>
+                        ))}
+                        
+                        {/* Improved Edit Hint */}
+                        <div className="absolute -top-8 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-all duration-200 pointer-events-none">
+                          <div className="bg-purple-900/90 text-white text-xs px-3 py-1 rounded-lg whitespace-nowrap border border-purple-500/50 backdrop-blur-sm">
+                            <span className="flex items-center">
+                              <Type className="w-3 h-3 mr-1" />
+                              Double-click to edit text
+                            </span>
                           </div>
                         </div>
                       </div>
                       
-                      {/* Selection and resize handles */}
+                      {/* Enhanced Selection and Resize Handles */}
                       {selectedElement === element.id && (
                         <div className="absolute inset-0 pointer-events-none">
-                          {/* Bounding box */}
-                          <div className="absolute inset-0 border-2 border-purple-500 border-dashed rounded pointer-events-none" 
-                               style={{ margin: '-4px' }} />
+                          {/* Sticky Bounding Box */}
+                          <div 
+                            className="absolute border-2 border-purple-400 border-dashed rounded-lg bg-purple-500/10 backdrop-blur-sm pointer-events-none animate-pulse" 
+                            style={{ 
+                              left: '-8px',
+                              top: '-8px',
+                              right: '-8px',
+                              bottom: '-8px',
+                              minWidth: '120px',
+                              minHeight: '40px'
+                            }} 
+                          />
                           
-                          {/* Control buttons */}
-                          <div className="absolute -top-8 left-0 flex space-x-1 pointer-events-auto">
-                            <button
-                              onClick={(e) => handleDuplicateElement(element.id, e)}
-                              className="w-6 h-6 bg-blue-500 hover:bg-blue-600 rounded text-white flex items-center justify-center transition-colors"
-                              title="Duplicate"
-                            >
-                              <Copy className="w-3 h-3" />
-                            </button>
-                            <button
-                              onClick={(e) => handleDeleteElement(element.id, e)}
-                              className="w-6 h-6 bg-red-500 hover:bg-red-600 rounded text-white flex items-center justify-center transition-colors"
-                              title="Delete (Del)"
-                            >
-                              <X className="w-3 h-3" />
-                            </button>
+                          {/* Enhanced Control Buttons */}
+                          <div className="absolute -top-10 left-0 flex items-center space-x-1 pointer-events-auto">
+                            <div className="bg-black/90 rounded-lg px-2 py-1 border border-purple-500/50 flex items-center space-x-1">
+                              <button
+                                onClick={(e) => handleDuplicateElement(element.id, e)}
+                                className="w-6 h-6 bg-blue-500 hover:bg-blue-400 rounded text-white flex items-center justify-center transition-colors"
+                                title="Duplicate (Ctrl+D)"
+                              >
+                                <Copy className="w-3 h-3" />
+                              </button>
+                              <button
+                                onClick={(e) => setEditingElement(element.id)}
+                                className="w-6 h-6 bg-purple-500 hover:bg-purple-400 rounded text-white flex items-center justify-center transition-colors"
+                                title="Edit Text (F2)"
+                              >
+                                <Type className="w-3 h-3" />
+                              </button>
+                              <button
+                                onClick={(e) => handleDeleteElement(element.id, e)}
+                                className="w-6 h-6 bg-red-500 hover:bg-red-400 rounded text-white flex items-center justify-center transition-colors"
+                                title="Delete (Del)"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
                           </div>
                           
-                          {/* Resize handles */}
-                          <div className="absolute -top-1 -left-1 w-2 h-2 bg-purple-500 rounded-full cursor-nw-resize pointer-events-auto"
-                               onMouseDown={(e) => handleResizeStart(element.id, 'top-left', e)} />
-                          <div className="absolute -top-1 -right-1 w-2 h-2 bg-purple-500 rounded-full cursor-ne-resize pointer-events-auto"
-                               onMouseDown={(e) => handleResizeStart(element.id, 'top-right', e)} />
-                          <div className="absolute -bottom-1 -left-1 w-2 h-2 bg-purple-500 rounded-full cursor-sw-resize pointer-events-auto"
-                               onMouseDown={(e) => handleResizeStart(element.id, 'bottom-left', e)} />
-                          <div className="absolute -bottom-1 -right-1 w-2 h-2 bg-purple-500 rounded-full cursor-se-resize pointer-events-auto"
-                               onMouseDown={(e) => handleResizeStart(element.id, 'bottom-right', e)} />
+                          {/* Text Info Badge */}
+                          <div className="absolute -bottom-8 right-0 pointer-events-none">
+                            <div className="bg-black/90 text-xs text-gray-300 px-2 py-1 rounded border border-gray-600/50 flex items-center space-x-2">
+                              <span>{element.content.length} chars</span>
+                              <div className="w-px h-3 bg-gray-600" />
+                              <span>{Math.ceil(element.size || 16)}px</span>
+                              <div className="w-px h-3 bg-gray-600" />
+                              <div 
+                                className="w-3 h-3 rounded border border-gray-500"
+                                style={{ backgroundColor: element.color || 'white' }}
+                              />
+                            </div>
+                          </div>
                         </div>
                       )}
                     </div>

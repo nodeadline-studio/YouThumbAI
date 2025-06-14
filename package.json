@@ -7,7 +7,13 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:qa": "playwright test tests/automated-qa.test.ts",
+    "test:qa:ui": "playwright test tests/automated-qa.test.ts --ui",
+    "test:comprehensive": "playwright test tests/comprehensive-qa.test.ts",
+    "test:comprehensive:ui": "playwright test tests/comprehensive-qa.test.ts --ui",
+    "test:all": "playwright test tests/",
+    "test:install": "playwright install"
   },
   "dependencies": {
     "@types/html2canvas": "^0.5.35",
@@ -27,6 +33,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.9.1",
+    "@playwright/test": "^1.53.0",
     "@types/dom-to-image": "^2.6.7",
     "@types/file-saver": "^2.0.7",
     "@types/react": "^18.3.5",

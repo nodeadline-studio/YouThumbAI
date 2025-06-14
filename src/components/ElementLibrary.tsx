@@ -1,8 +1,7 @@
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useVideoStore } from '../store/videoStore';
-import { Library, Copy, Layers, Type, Image, Trash2, Edit3, ChevronUp, ChevronDown } from 'lucide-react';
+import { Library, Copy, Layers, Type, Image, Trash2, Edit3, ChevronUp, ChevronDown, Search, Filter, ChevronLeft, ChevronRight, Upload, Star, Heart, Square, Circle, Triangle, Zap } from 'lucide-react';
 import { nanoid } from '../utils/helpers';
-import { Palette, Shapes, Users } from 'lucide-react';
 import { ThumbnailElement, ThumbnailElementType } from '../types';
 
 interface ElementLibraryProps {
@@ -12,14 +11,21 @@ interface ElementLibraryProps {
 
 const ElementLibrary: React.FC<ElementLibraryProps> = ({ onEditElement, onSelectElement }) => {
   const { videoData, setThumbnailElements, thumbnailElements } = useVideoStore();
-  const [activeCategory, setActiveCategory] = React.useState('text');
+  const [activeCategory, setActiveCategory] = useState('text');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterType, setFilterType] = useState('all');
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(true);
   
-  // Sample template elements
-  const templates = [
+  // Enhanced template elements with more variety
+  const templates = {
+    text: [
     {
       id: 'big-title',
       name: 'Big Title',
       preview: 'TITLE',
+        description: 'Large main title text',
       elements: [{
         type: 'text' as ThumbnailElementType,
         content: 'Main Title',
@@ -40,6 +46,7 @@ const ElementLibrary: React.FC<ElementLibraryProps> = ({ onEditElement, onSelect
       id: 'subtitle',
       name: 'Subtitle',
       preview: 'Subtitle',
+        description: 'Supporting text below main title',
       elements: [{
         type: 'text' as ThumbnailElementType,
         content: 'Subtitle Text',
@@ -60,6 +67,7 @@ const ElementLibrary: React.FC<ElementLibraryProps> = ({ onEditElement, onSelect
       id: 'number',
       name: 'Number',
       preview: '#1',
+        description: 'Ranking or count display',
       elements: [{
         type: 'text' as ThumbnailElementType,
         content: '#1',
@@ -80,6 +88,7 @@ const ElementLibrary: React.FC<ElementLibraryProps> = ({ onEditElement, onSelect
       id: 'highlight',
       name: 'Highlight',
       preview: 'NEW!',
+        description: 'Attention-grabbing accent text',
       elements: [{
         type: 'text' as ThumbnailElementType,
         content: 'NEW!',
@@ -99,10 +108,11 @@ const ElementLibrary: React.FC<ElementLibraryProps> = ({ onEditElement, onSelect
     {
       id: 'person',
       name: 'Person',
-      preview: '👤',
+        preview: 'Person',
+        description: 'Person or character name',
       elements: [{
         type: 'text' as ThumbnailElementType,
-        content: 'Person',
+          content: 'Person Name',
         color: '#93c5fd',
         size: 28,
         x: 20,
@@ -119,7 +129,8 @@ const ElementLibrary: React.FC<ElementLibraryProps> = ({ onEditElement, onSelect
     {
       id: 'logo',
       name: 'Logo',
-      preview: '⭐',
+        preview: 'LOGO',
+        description: 'Brand or channel logo text',
       elements: [{
         type: 'text' as ThumbnailElementType,
         content: 'LOGO',
@@ -135,59 +146,293 @@ const ElementLibrary: React.FC<ElementLibraryProps> = ({ onEditElement, onSelect
           shadow: true
         }
       }]
-    }
-  ];
-
-  const handleAddElement = (type: ThumbnailElementType, preset: string) => {
-    const newElement: ThumbnailElement = {
-      id: nanoid(),
-      type,
-      content: preset === 'title' ? (videoData?.title || 'Title') : preset,
-      color: preset === 'accent' ? '#ffbb00' : '#ffffff',
-      size: preset === 'subtitle' ? 24 : 36,
+      },
+      {
+        id: 'question',
+        name: 'Question',
+        preview: 'WHY?',
+        description: 'Question or curiosity text',
+        elements: [{
+          type: 'text' as ThumbnailElementType,
+          content: 'WHY?',
+          color: '#a78bfa',
+          size: 40,
       x: 50,
-      y: preset === 'subtitle' ? 65 : 50,
+          y: 30,
       styles: {
-        bold: preset !== 'subtitle',
+            bold: true,
         italic: false,
         underline: false,
-        align: 'center',
+            align: 'center' as 'left' | 'center' | 'right',
+            shadow: true
+          }
+        }]
+      },
+      {
+        id: 'call-to-action',
+        name: 'Call to Action',
+        preview: 'WATCH NOW',
+        description: 'Action-oriented text',
+        elements: [{
+          type: 'text' as ThumbnailElementType,
+          content: 'WATCH NOW',
+          color: '#10b981',
+          size: 32,
+          x: 50,
+          y: 85,
+          styles: {
+            bold: true,
+            italic: false,
+            underline: true,
+            align: 'center' as 'left' | 'center' | 'right',
         shadow: true
       }
-    };
+        }]
+      }
+    ],
+    shapes: [
+      {
+        id: 'rectangle',
+        name: 'Rectangle',
+        preview: '▭',
+        description: 'Basic rectangle shape',
+        elements: [{
+          type: 'text' as ThumbnailElementType,
+          content: '▭',
+          color: '#3b82f6',
+          size: 48,
+          x: 50,
+          y: 50,
+          styles: { bold: false, italic: false, underline: false, align: 'center' as const, shadow: false }
+        }]
+      },
+      {
+        id: 'circle',
+        name: 'Circle',
+        preview: '●',
+        description: 'Perfect circle shape',
+        elements: [{
+          type: 'text' as ThumbnailElementType,
+          content: '●',
+          color: '#ef4444',
+          size: 48,
+          x: 50,
+          y: 50,
+          styles: { bold: false, italic: false, underline: false, align: 'center' as const, shadow: false }
+        }]
+      },
+      {
+        id: 'triangle',
+        name: 'Triangle',
+        preview: '▲',
+        description: 'Triangle pointer shape',
+        elements: [{
+          type: 'text' as ThumbnailElementType,
+          content: '▲',
+          color: '#f59e0b',
+          size: 48,
+          x: 50,
+          y: 50,
+          styles: { bold: false, italic: false, underline: false, align: 'center' as const, shadow: false }
+        }]
+      },
+      {
+        id: 'arrow',
+        name: 'Arrow',
+        preview: '→',
+        description: 'Directional arrow',
+        elements: [{
+          type: 'text' as ThumbnailElementType,
+          content: '→',
+          color: '#8b5cf6',
+          size: 48,
+          x: 50,
+          y: 50,
+          styles: { bold: false, italic: false, underline: false, align: 'center' as const, shadow: false }
+        }]
+      },
+      {
+        id: 'star',
+        name: 'Star',
+        preview: '★',
+        description: 'Star rating or highlight',
+        elements: [{
+          type: 'text' as ThumbnailElementType,
+          content: '★',
+          color: '#fbbf24',
+          size: 48,
+          x: 50,
+          y: 50,
+          styles: { bold: false, italic: false, underline: false, align: 'center' as const, shadow: false }
+        }]
+      },
+      {
+        id: 'heart',
+        name: 'Heart',
+        preview: '♥',
+        description: 'Heart for likes or love',
+        elements: [{
+          type: 'text' as ThumbnailElementType,
+          content: '♥',
+          color: '#f87171',
+          size: 48,
+          x: 50,
+          y: 50,
+          styles: { bold: false, italic: false, underline: false, align: 'center' as const, shadow: false }
+        }]
+      }
+    ],
+    images: [
+      {
+        id: 'person-placeholder',
+        name: 'Person Placeholder',
+        preview: '👤',
+        description: 'Placeholder for person image',
+        elements: [{
+          type: 'image' as ThumbnailElementType,
+          content: 'Person',
+          url: 'https://via.placeholder.com/300x300/4f46e5/ffffff?text=👤',
+          x: 25,
+          y: 50,
+          size: 200
+        }]
+      },
+      {
+        id: 'logo-placeholder',
+        name: 'Logo Placeholder',
+        preview: '🏢',
+        description: 'Placeholder for brand logo',
+        elements: [{
+          type: 'image' as ThumbnailElementType,
+          content: 'Logo',
+          url: 'https://via.placeholder.com/200x100/1f2937/ffffff?text=LOGO',
+          x: 75,
+          y: 15,
+          size: 100
+        }]
+      },
+      {
+        id: 'background',
+        name: 'Background',
+        preview: '🖼️',
+        description: 'Background image overlay',
+        elements: [{
+          type: 'image' as ThumbnailElementType,
+          content: 'Background',
+          url: 'https://via.placeholder.com/1280x720/6366f1/ffffff?text=Background',
+          x: 50,
+          y: 50,
+          size: 400
+        }]
+      },
+      {
+        id: 'icon',
+        name: 'Icon',
+        preview: '⚡',
+        description: 'Small decorative icon',
+        elements: [{
+          type: 'image' as ThumbnailElementType,
+          content: 'Icon',
+          url: 'https://via.placeholder.com/100x100/f59e0b/ffffff?text=⚡',
+          x: 85,
+          y: 25,
+          size: 50
+        }]
+      }
+    ]
+  };
+      
+  // Filter templates based on search and category
+  const filteredTemplates = React.useMemo(() => {
+    const categoryTemplates = templates[activeCategory as keyof typeof templates] || [];
     
-    if (type === 'image') {
-      newElement.url = `https://via.placeholder.com/300x300/333333/FFFFFF/?text=${preset}`;
+    if (!searchQuery && filterType === 'all') {
+      return categoryTemplates;
     }
+    
+    return categoryTemplates.filter(template => {
+      const matchesSearch = searchQuery === '' || 
+        template.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        template.description.toLowerCase().includes(searchQuery.toLowerCase());
+      
+      const matchesFilter = filterType === 'all' || 
+        (filterType === 'popular' && ['big-title', 'number', 'highlight'].includes(template.id)) ||
+        (filterType === 'recent' && ['question', 'call-to-action'].includes(template.id));
+      
+      return matchesSearch && matchesFilter;
+    });
+  }, [activeCategory, searchQuery, filterType]);
+
+  // Handle scroll functionality
+  const updateScrollButtons = () => {
+    if (scrollContainerRef.current) {
+      const { scrollLeft, scrollWidth, clientWidth } = scrollContainerRef.current;
+      setCanScrollLeft(scrollLeft > 0);
+      setCanScrollRight(scrollLeft < scrollWidth - clientWidth - 1);
+    }
+  };
+
+  const scrollLeft = () => {
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollBy({ left: -200, behavior: 'smooth' });
+    }
+  };
+
+  const scrollRight = () => {
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollBy({ left: 200, behavior: 'smooth' });
+    }
+  };
+
+  useEffect(() => {
+    updateScrollButtons();
+    const container = scrollContainerRef.current;
+    if (container) {
+      container.addEventListener('scroll', updateScrollButtons);
+      return () => container.removeEventListener('scroll', updateScrollButtons);
+    }
+  }, [filteredTemplates]);
+
+  const handleAddElement = (template: any) => {
+    const newElement: ThumbnailElement = {
+      ...template.elements[0],
+      id: nanoid()
+    };
     
     if (onSelectElement) {
       onSelectElement(newElement);
     } else {
       setThumbnailElements([...thumbnailElements, newElement]);
       
-      // Automatically select the new element for editing if callback is provided
       if (onEditElement) {
         onEditElement(newElement.id);
       }
     }
   };
 
-  const duplicateTemplate = (templateIndex: number) => {
-    const template = templates[templateIndex];
-    const newElement = {
-      ...template.elements[0],
-      id: nanoid(),
-      type: template.elements[0].type as ThumbnailElementType
-    };
-    
-    if (onSelectElement) {
-      onSelectElement(newElement as ThumbnailElement);
-    } else {
-      setThumbnailElements([...thumbnailElements, newElement]);
-      
-      if (onEditElement) {
-        onEditElement(newElement.id);
-      }
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const imageUrl = e.target?.result as string;
+        const newElement: ThumbnailElement = {
+          id: nanoid(),
+          type: 'image',
+          content: file.name,
+          url: imageUrl,
+          x: 50,
+          y: 50,
+          size: 200
+        };
+        
+        if (onSelectElement) {
+          onSelectElement(newElement);
+        } else {
+          setThumbnailElements([...thumbnailElements, newElement]);
+        }
+      };
+      reader.readAsDataURL(file);
     }
   };
 
@@ -200,213 +445,254 @@ const ElementLibrary: React.FC<ElementLibraryProps> = ({ onEditElement, onSelect
     }
 
     const newElements = [...thumbnailElements];
-    const newIndex = direction === 'up' ? index - 1 : index + 1;
-    [newElements[index], newElements[newIndex]] = [newElements[newIndex], newElements[index]];
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    [newElements[index], newElements[targetIndex]] = [newElements[targetIndex], newElements[index]];
     setThumbnailElements(newElements);
   };
   
-  const handleDragStart = (templateIndex: number, e: React.DragEvent) => {
-    const template = templates[templateIndex];
+  const duplicateElement = (index: number) => {
+    const element = thumbnailElements[index];
     const newElement = {
-      ...template.elements[0],
+      ...element,
       id: nanoid(),
-      type: template.elements[0].type
+      x: element.x + 5,
+      y: element.y + 5
     };
-    
+    setThumbnailElements([...thumbnailElements, newElement]);
+  };
+
+  const deleteElement = (index: number) => {
+    const newElements = thumbnailElements.filter((_, i) => i !== index);
+    setThumbnailElements(newElements);
+  };
+
+  const handleDragStart = (template: any, e: React.DragEvent) => {
     e.dataTransfer.setData('text/plain', JSON.stringify({
-      type: 'text',
-      content: newElement.content,
-      style: {
-        color: newElement.color,
-        size: newElement.size,
-        ...newElement.styles
-      }
+      type: template.elements[0].type,
+      content: template.elements[0].content,
+      ...template.elements[0]
     }));
   };
 
   return (
-    <div className="bg-gray-800 bg-opacity-60 backdrop-blur-lg rounded-xl border border-gray-700 p-4 mb-6">
-      <div className="flex items-center mb-4">
+    <div data-testid="element-library" className="bg-gray-800 rounded-lg p-4 h-full flex flex-col">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center">
         <Library className="h-5 w-5 mr-2 text-purple-400" />
-        <h3 className="text-lg font-medium">Element Library</h3>
+          <h3 className="text-lg font-semibold text-white">Element Library</h3>
+        </div>
+        <div className="text-xs text-gray-400">
+          {filteredTemplates.length} items
+        </div>
+      </div>
+
+      {/* Search and Filter */}
+      <div className="mb-4 space-y-3">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <input
+            data-testid="element-search"
+            type="text"
+            placeholder="Search elements..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-purple-500"
+          />
+        </div>
+        
+        <div className="flex items-center space-x-2">
+          <Filter className="h-4 w-4 text-gray-400" />
+          <select
+            value={filterType}
+            onChange={(e) => setFilterType(e.target.value)}
+            className="bg-gray-700 border border-gray-600 rounded px-3 py-1 text-sm text-white focus:outline-none focus:border-purple-500"
+          >
+            <option value="all">All</option>
+            <option value="popular">Popular</option>
+            <option value="recent">Recent</option>
+          </select>
+        </div>
       </div>
       
-      <div className="flex overflow-x-auto pb-2 mb-4 scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-transparent">
+      {/* Category Tabs */}
+      <div className="flex mb-4 bg-gray-700 rounded-lg p-1">
         <button
-          className={`flex-shrink-0 flex items-center px-3 py-1 rounded-lg mr-2 text-sm font-medium transition-colors ${
-            activeCategory === 'text' ? 'bg-purple-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-          }`}
+          data-testid="text-tab"
           onClick={() => setActiveCategory('text')}
+          className={`flex-1 flex items-center justify-center py-2 px-3 rounded-md text-sm font-medium transition-colors ${
+            activeCategory === 'text'
+              ? 'bg-purple-600 text-white'
+              : 'text-gray-300 hover:text-white hover:bg-gray-600'
+          }`}
         >
-          <Type className="h-4 w-4 mr-2" />
+          <Type className="h-4 w-4 mr-1" />
           Text
         </button>
         <button
-          className={`flex-shrink-0 flex items-center px-3 py-1 rounded-lg mr-2 text-sm font-medium transition-colors ${
-            activeCategory === 'shapes' ? 'bg-purple-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-          }`}
+          data-testid="shapes-tab"
           onClick={() => setActiveCategory('shapes')}
+          className={`flex-1 flex items-center justify-center py-2 px-3 rounded-md text-sm font-medium transition-colors ${
+            activeCategory === 'shapes'
+              ? 'bg-purple-600 text-white'
+              : 'text-gray-300 hover:text-white hover:bg-gray-600'
+          }`}
         >
-          <Shapes className="h-4 w-4 mr-2" />
+          <Square className="h-4 w-4 mr-1" />
           Shapes
         </button>
         <button
-          className={`flex-shrink-0 flex items-center px-3 py-1 rounded-lg mr-2 text-sm font-medium transition-colors ${
-            activeCategory === 'images' ? 'bg-purple-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-          }`}
+          data-testid="images-tab"
           onClick={() => setActiveCategory('images')}
+          className={`flex-1 flex items-center justify-center py-2 px-3 rounded-md text-sm font-medium transition-colors ${
+            activeCategory === 'images'
+              ? 'bg-purple-600 text-white'
+              : 'text-gray-300 hover:text-white hover:bg-gray-600'
+          }`}
         >
-          <Image className="h-4 w-4 mr-2" />
+          <Image className="h-4 w-4 mr-1" />
           Images
-        </button>
-        <button
-          className={`flex-shrink-0 flex items-center px-3 py-1 rounded-lg mr-2 text-sm font-medium transition-colors ${
-            activeCategory === 'palette' ? 'bg-purple-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-          }`}
-          onClick={() => setActiveCategory('palette')}
-        >
-          <Palette className="h-4 w-4 mr-2" />
-          Palette
-        </button>
-        <button
-          className={`flex-shrink-0 flex items-center px-3 py-1 rounded-lg mr-2 text-sm font-medium transition-colors ${
-            activeCategory === 'templates' ? 'bg-purple-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-          }`}
-          onClick={() => setActiveCategory('templates')}
-        >
-          <Layers className="h-4 w-4 mr-2" />
-          Templates
         </button>
       </div>
       
-      {/* Elements in the library */}
-      {activeCategory === 'text' && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-4">
+      {/* Templates with Horizontal Scroll */}
+      <div className="flex-1 relative">
+        {/* Scroll Buttons */}
+        {canScrollLeft && (
           <button
-            className="p-2 bg-gray-700 hover:bg-gray-600 rounded text-center transition-colors"
-            onClick={() => handleAddElement('text', 'title')}
+            data-testid="scroll-left"
+            onClick={scrollLeft}
+            className="absolute left-0 top-1/2 transform -translate-y-1/2 z-10 bg-gray-900/80 hover:bg-gray-900 rounded-full p-2 text-white transition-colors"
           >
-            <div className="text-lg font-bold text-white mb-1">Title</div>
-            <div className="text-xs text-gray-400">Main title</div>
+            <ChevronLeft className="h-4 w-4" />
           </button>
+        )}
+        
+        {canScrollRight && (
           <button
-            className="p-2 bg-gray-700 hover:bg-gray-600 rounded text-center transition-colors"
-            onClick={() => handleAddElement('text', 'subtitle')}
+            data-testid="scroll-right"
+            onClick={scrollRight}
+            className="absolute right-0 top-1/2 transform -translate-y-1/2 z-10 bg-gray-900/80 hover:bg-gray-900 rounded-full p-2 text-white transition-colors"
           >
-            <div className="text-base text-gray-200 mb-1">Subtitle</div>
-            <div className="text-xs text-gray-400">Supporting text</div>
+            <ChevronRight className="h-4 w-4" />
           </button>
-          <button
-            className="p-2 bg-gray-700 hover:bg-gray-600 rounded text-center transition-colors"
-            onClick={() => handleAddElement('text', 'accent')}
-          >
-            <div className="text-base font-bold text-yellow-400 mb-1">Accent</div>
-            <div className="text-xs text-gray-400">Highlighted text</div>
-          </button>
-          <button
-            className="p-2 bg-gray-700 hover:bg-gray-600 rounded text-center transition-colors"
-            onClick={() => handleAddElement('text', 'number')}
-          >
-            <div className="text-xl font-bold text-blue-400 mb-1">#1</div>
-            <div className="text-xs text-gray-400">Number or ranking</div>
-          </button>
-          <button
-            className="p-2 bg-gray-700 hover:bg-gray-600 rounded text-center transition-colors"
-            onClick={() => handleAddElement('text', 'callout')}
-          >
-            <div className="text-base font-bold text-red-400 mb-1">NEW!</div>
-            <div className="text-xs text-gray-400">Attention grabber</div>
-          </button>
-          <button
-            className="p-2 bg-gray-700 hover:bg-gray-600 rounded text-center transition-colors"
-            onClick={() => handleAddElement('text', 'detail')}
-          >
-            <div className="text-sm text-gray-300 mb-1">Small detail</div>
-            <div className="text-xs text-gray-400">Additional info</div>
-          </button>
-        </div>
       )}
       
-      {activeCategory === 'templates' && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
-          {templates.map((template, index) => (
+        {/* Scrollable Container */}
+        <div
+          ref={scrollContainerRef}
+          data-testid="element-library-scroll"
+          className="flex space-x-3 overflow-x-auto scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800 pb-2"
+          style={{ scrollbarWidth: 'thin' }}
+        >
+          {filteredTemplates.map((template, index) => (
             <div
               key={template.id}
-              className="bg-gray-700 rounded-lg p-3 cursor-pointer hover:bg-gray-600 transition-colors"
-              onClick={() => duplicateTemplate(index)}
+              data-testid={`template-${template.id}`}
+              className="flex-shrink-0 w-24 bg-gray-700 rounded-lg p-3 cursor-pointer hover:bg-gray-600 transition-colors group"
+              onClick={() => handleAddElement(template)}
               draggable
-              onDragStart={(e) => handleDragStart(index, e)}
+              onDragStart={(e) => handleDragStart(template, e)}
             >
-              <div className="text-center mb-2">
-                <div className={`text-lg ${
-                  template.id === 'big-title' ? 'font-bold text-white' :
-                  template.id === 'subtitle' ? 'text-gray-200' :
-                  template.id === 'number' ? 'font-bold text-yellow-400' :
-                  template.id === 'highlight' ? 'font-bold text-red-400' :
-                  template.id === 'person' ? 'italic text-blue-300' :
-                  'font-bold text-yellow-300'
-                }`}>
+              <div className="text-center">
+                <div className="text-2xl mb-2 group-hover:scale-110 transition-transform">
                   {template.preview}
                 </div>
+                <div className="text-xs text-gray-300 font-medium mb-1">
+                  {template.name}
+                </div>
+                <div className="text-xs text-gray-400 leading-tight">
+                  {template.description}
+                </div>
               </div>
-              <div className="text-xs text-center text-gray-300">{template.name}</div>
             </div>
           ))}
         </div>
+
+        {/* Image Upload for Images Tab */}
+        {activeCategory === 'images' && (
+          <div className="mt-4 p-4 border-2 border-dashed border-gray-600 rounded-lg">
+            <div data-testid="image-drop-zone" className="text-center">
+              <Upload className="h-8 w-8 mx-auto mb-2 text-gray-400" />
+              <p className="text-sm text-gray-400 mb-2">Upload your own image</p>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleFileUpload}
+                className="hidden"
+                id="image-upload"
+              />
+              <label
+                htmlFor="image-upload"
+                className="inline-block px-4 py-2 bg-purple-600 hover:bg-purple-500 rounded-lg text-white text-sm cursor-pointer transition-colors"
+              >
+                Choose File
+              </label>
+            </div>
+        </div>
       )}
+      </div>
       
-      {/* Existing elements list */}
+      {/* Current Elements List */}
       {thumbnailElements.length > 0 && (
-        <div className="mt-6">
-          <h4 className="text-sm font-medium text-gray-300 mb-2">Current Elements</h4>
-          <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+        <div className="mt-4 pt-4 border-t border-gray-700">
+          <h4 className="text-sm font-medium text-gray-300 mb-3 flex items-center">
+            <Layers className="h-4 w-4 mr-1" />
+            Canvas Elements ({thumbnailElements.length})
+          </h4>
+          <div className="space-y-2 max-h-32 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800">
             {thumbnailElements.map((element, index) => (
               <div 
                 key={element.id} 
-                className="flex items-center justify-between bg-gray-700 bg-opacity-50 p-2 rounded"
+                className="flex items-center justify-between bg-gray-700 rounded p-2 text-sm"
               >
-                <div className="flex items-center overflow-hidden flex-1">
+                <div className="flex items-center flex-1 min-w-0">
                   {element.type === 'text' ? (
-                    <Type className="h-4 w-4 mr-2 text-gray-400 flex-shrink-0" />
+                    <Type className="h-3 w-3 mr-2 text-blue-400 flex-shrink-0" />
                   ) : (
-                    <Image className="h-4 w-4 mr-2 text-gray-400 flex-shrink-0" />
+                    <Image className="h-3 w-3 mr-2 text-green-400 flex-shrink-0" />
                   )}
-                  <div className="truncate text-sm">
-                    {element.type === 'text' ? element.content : 'Image element'}
-                  </div>
+                  <span className="text-gray-300 truncate">
+                    {element.content}
+                  </span>
                 </div>
-                
-                <div className="flex items-center space-x-1">
+                <div className="flex items-center space-x-1 ml-2">
                   <button 
-                    className="text-gray-400 hover:text-white p-1"
                     onClick={() => moveElement(index, 'up')}
                     disabled={index === 0}
+                    className="p-1 text-gray-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Move up"
                   >
-                    <ChevronUp className="h-4 w-4" />
+                    <ChevronUp className="h-3 w-3" />
                   </button>
                   <button 
-                    className="text-gray-400 hover:text-white p-1"
                     onClick={() => moveElement(index, 'down')}
                     disabled={index === thumbnailElements.length - 1}
+                    className="p-1 text-gray-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Move down"
                   >
-                    <ChevronDown className="h-4 w-4" />
+                    <ChevronDown className="h-3 w-3" />
                   </button>
-                  {onEditElement && (
-                    <button 
-                      className="text-gray-400 hover:text-blue-400 p-1"
-                      onClick={() => onEditElement(element.id)}
-                    >
-                      <Edit3 className="h-4 w-4" />
-                    </button>
-                  )}
-                  <button 
-                    className="text-gray-400 hover:text-red-400 p-1"
-                    onClick={() => {
-                      const newElements = thumbnailElements.filter(el => el.id !== element.id);
-                      setThumbnailElements(newElements);
-                    }}
+                  <button
+                    onClick={() => duplicateElement(index)}
+                    className="p-1 text-gray-400 hover:text-blue-400"
+                    title="Duplicate"
                   >
-                    <Trash2 className="h-4 w-4" />
+                    <Copy className="h-3 w-3" />
+                  </button>
+                    <button 
+                    onClick={() => onEditElement?.(element.id)}
+                    className="p-1 text-gray-400 hover:text-purple-400"
+                    title="Edit"
+                    >
+                    <Edit3 className="h-3 w-3" />
+                    </button>
+                  <button 
+                    onClick={() => deleteElement(index)}
+                    className="p-1 text-gray-400 hover:text-red-400"
+                    title="Delete"
+                  >
+                    <Trash2 className="h-3 w-3" />
                   </button>
                 </div>
               </div>

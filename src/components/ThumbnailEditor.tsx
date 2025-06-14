@@ -4,6 +4,7 @@ import ThumbnailPreview from './ThumbnailPreview';
 import ThumbnailControls from './ThumbnailControls';
 import ElementLibrary from './ElementLibrary';
 import BatchExportPanel from './BatchExportPanel';
+import ExportMenu from './ExportMenu';
 
 import { Sparkles, Download, Loader2, RefreshCw, Library, Sliders, Users, Image, Settings, Type, Blend, Youtube, Link } from 'lucide-react';
 import { saveAs } from 'file-saver';
@@ -50,6 +51,7 @@ const ThumbnailEditor: React.FC = () => {
   const [activeTab, setActiveTab] = useState<string>(videoData ? 'elements' : 'video');
   const [videoUrl, setVideoUrl] = useState('');
   const [loadingVideo, setLoadingVideo] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
 
 
   const handleEditElement = (id: string) => {
@@ -270,36 +272,8 @@ const ThumbnailEditor: React.FC = () => {
     }
   };
 
-  const handleExport = async () => {
-    if (selectedVariation === -1 || !variations[selectedVariation]) {
-      alert('Please select a variation to export');
-      return;
-    }
-    
-    setExporting(true);
-    try {
-      const response = await fetch(variations[selectedVariation].url, {
-        mode: 'cors',
-        headers: {
-          'Accept': 'image/*'
-        }
-      });
-
-      if (!response.ok) throw new Error('Failed to download image');
-      if (!response.headers.get('content-type')?.includes('image/')) {
-        throw new Error('Invalid image response');
-      }
-      
-      const blob = await response.blob();
-      const filename = `thumbnail-${Date.now()}.png`;
-      saveAs(blob, filename);
-    } catch (error) {
-      console.error('Error exporting thumbnail:', error);
-      const message = error instanceof Error ? error.message : 'Failed to export thumbnail';
-      alert(`Export failed: ${message}\nPlease try again or generate a new variation.`);
-    } finally {
-      setExporting(false);
-    }
+  const handleExport = () => {
+    setShowExportMenu(true);
   };
 
   // Handle canvas drop events for text and people elements
@@ -369,7 +343,7 @@ const ThumbnailEditor: React.FC = () => {
 
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 min-h-[calc(100vh-12rem)]">
+    <div data-testid="thumbnail-editor" className="grid grid-cols-1 lg:grid-cols-4 gap-6 min-h-[calc(100vh-12rem)]">
       <div className="lg:col-span-3 order-2 lg:order-1">
         <div className="bg-gray-800 bg-opacity-60 backdrop-blur-lg rounded-xl border border-gray-700 p-4">
           {variations.length > 0 && (
@@ -437,6 +411,7 @@ const ThumbnailEditor: React.FC = () => {
               generatedImage={selectedVariation !== -1 ? variations[selectedVariation].url : null}
               isGenerating={generating}
               onDrop={handleCanvasDrop}
+              data-testid="thumbnail-canvas"
               data-thumbnail-preview
             />
           ) : (
@@ -547,6 +522,7 @@ const ThumbnailEditor: React.FC = () => {
                   </button>
                 
                 <button
+                  data-testid="export-button"
                   className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg font-medium flex items-center justify-center transition-colors duration-300"
                   onClick={handleExport}
                   disabled={exporting}
@@ -619,7 +595,7 @@ const ThumbnailEditor: React.FC = () => {
       </div>
       
       <div className="col-span-1 order-1 lg:order-2">
-        <div className="bg-gray-800 bg-opacity-60 backdrop-blur-lg rounded-xl border border-gray-700 overflow-hidden">
+        <div data-testid="sidebar" className="bg-gray-800 bg-opacity-60 backdrop-blur-lg rounded-xl border border-gray-700 overflow-hidden">
           <Tabs defaultTab={activeTab} onChange={setActiveTab}>
             <TabList>
               {!videoData && (
@@ -720,9 +696,12 @@ const ThumbnailEditor: React.FC = () => {
                 {videoData ? (
                   <>
                     <SubtitleGenerator />
-                    <ElementLibrary onEditElement={handleEditElement} onSelectElement={(element: ThumbnailElement) => {
-                      setThumbnailElements([...thumbnailElements, element]);
-                    }} />
+                    <ElementLibrary 
+                      onEditElement={handleEditElement} 
+                      onSelectElement={(element: ThumbnailElement) => {
+                        setThumbnailElements([...thumbnailElements, element]);
+                      }} 
+                    />
                   </>
                 ) : (
                   <div className="text-center py-8">
@@ -801,6 +780,15 @@ const ThumbnailEditor: React.FC = () => {
           </Tabs>
         </div>
       </div>
+
+      {/* Export Menu Modal */}
+      <ExportMenu
+        isOpen={showExportMenu}
+        onClose={() => setShowExportMenu(false)}
+        thumbnailUrl={selectedVariation !== -1 ? variations[selectedVariation]?.url : undefined}
+        variations={variations}
+        videoTitle={videoData?.title}
+      />
     </div>
   );
 };

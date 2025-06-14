@@ -9,6 +9,18 @@ interface ThumbnailVariation {
   prompt: string;
 }
 
+// NEW: Interface for AI-generated title suggestions
+export interface TitleSuggestions {
+  shortTitle: string;
+  subtitle?: string;
+  elements: {
+    accent?: string;
+    number?: string;
+    detail?: string;
+  };
+  alternatives: string[];
+}
+
 export interface GenerationOptions {
   clickbaitIntensity: number;
   variationCount?: number;
@@ -500,3 +512,222 @@ function getLightingGuidelines(intensity: number): string {
 - Eye-catching glow effects
 - High-impact color combinations`;
 }
+
+// NEW: AI-powered title shortening and element suggestions
+export const generateTitleSuggestions = async (
+  originalTitle: string,
+  language: string = 'en',
+  clickbaitIntensity: number = 5
+): Promise<TitleSuggestions> => {
+  try {
+    const prompt = `
+You are an expert YouTube thumbnail text optimizer. Analyze this title and create optimized versions for thumbnail display.
+
+Original title: "${originalTitle}"
+Language: ${language}
+Clickbait intensity (1-10): ${clickbaitIntensity}
+
+Create:
+1. A shortened main title (max 40 characters) that captures the essence
+2. An optional subtitle for supporting information
+3. Specific elements that could be highlighted:
+   - accent: Key exciting word/phrase (like "NEW!", "BREAKING", etc.)
+   - number: Any ranking, count, or numerical element
+   - detail: Additional context or small detail text
+
+4. 3 alternative shortened versions
+
+Guidelines:
+- Keep the most important keywords
+- Maintain emotional impact
+- Consider cultural context for ${language}
+- Higher clickbait intensity = more dramatic language
+- Ensure readability at thumbnail size
+- For Russian/Cyrillic text, consider character width
+
+Respond in JSON format:
+{
+  "shortTitle": "shortened main title",
+  "subtitle": "optional supporting text",
+  "elements": {
+    "accent": "highlighted word/phrase",
+    "number": "numerical element",
+    "detail": "small additional info"
+  },
+  "alternatives": ["alt1", "alt2", "alt3"]
+}`;
+
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4',
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.7,
+      max_tokens: 500
+    });
+
+    const content = response.choices[0]?.message?.content;
+    if (!content) {
+      throw new Error('No response from OpenAI');
+    }
+
+    // Parse JSON response
+    const suggestions = JSON.parse(content) as TitleSuggestions;
+    
+    // Validate and provide fallbacks
+    if (!suggestions.shortTitle) {
+      suggestions.shortTitle = originalTitle.substring(0, 40) + (originalTitle.length > 40 ? '...' : '');
+    }
+    
+    if (!suggestions.alternatives || suggestions.alternatives.length === 0) {
+      suggestions.alternatives = [
+        originalTitle.substring(0, 35) + '...',
+        originalTitle.split(' ').slice(0, 4).join(' '),
+        originalTitle.split(' ').slice(0, 3).join(' ') + '...'
+      ];
+    }
+
+    return suggestions;
+
+  } catch (error) {
+    console.error('Error generating title suggestions:', error);
+    
+    // Fallback: Simple truncation with smart word breaks
+    const words = originalTitle.split(' ');
+    let shortTitle = originalTitle;
+    
+    if (originalTitle.length > 40) {
+      // Try to fit within 40 characters while keeping whole words
+      let truncated = '';
+      for (const word of words) {
+        if ((truncated + ' ' + word).length <= 37) {
+          truncated += (truncated ? ' ' : '') + word;
+        } else {
+          break;
+        }
+      }
+      shortTitle = truncated + '...';
+    }
+
+    return {
+      shortTitle,
+      elements: {},
+      alternatives: [
+        words.slice(0, 4).join(' '),
+        words.slice(0, 3).join(' ') + '...',
+        words.slice(0, 2).join(' ') + '...'
+      ]
+    };
+  }
+};
+
+// NEW: Auto-generate thumbnail elements from title suggestions
+export const generateElementsFromTitle = async (
+  titleSuggestions: TitleSuggestions,
+  canvasWidth: number = 1280,
+  canvasHeight: number = 720
+): Promise<ThumbnailElement[]> => {
+  const elements: ThumbnailElement[] = [];
+  let yOffset = 50; // Start from top
+
+  // Main title element
+  elements.push({
+    id: `title-${Date.now()}`,
+    type: 'text',
+    content: titleSuggestions.shortTitle,
+    x: 50, // 50px from left
+    y: yOffset,
+    size: Math.min(48, Math.max(24, 800 / titleSuggestions.shortTitle.length)), // Dynamic size
+    color: '#FFFFFF',
+    styles: {
+      bold: true,
+      italic: false,
+      underline: false,
+      align: 'left',
+      shadow: true
+    }
+  });
+
+  yOffset += 60;
+
+  // Subtitle if available
+  if (titleSuggestions.subtitle) {
+    elements.push({
+      id: `subtitle-${Date.now()}`,
+      type: 'text',
+      content: titleSuggestions.subtitle,
+      x: 50,
+      y: yOffset,
+      size: 24,
+      color: '#E0E0E0',
+      styles: {
+        bold: false,
+        italic: false,
+        underline: false,
+        align: 'left',
+        shadow: true
+      }
+    });
+    yOffset += 35;
+  }
+
+  // Accent element (highlighted text)
+  if (titleSuggestions.elements.accent) {
+    elements.push({
+      id: `accent-${Date.now()}`,
+      type: 'text',
+      content: titleSuggestions.elements.accent,
+      x: canvasWidth - 200, // Right side
+      y: 50,
+      size: 32,
+      color: '#FFD700', // Gold color for accent
+      styles: {
+        bold: true,
+        italic: false,
+        underline: false,
+        align: 'center',
+        shadow: true
+      }
+    });
+  }
+
+  // Number element (if available)
+  if (titleSuggestions.elements.number) {
+    elements.push({
+      id: `number-${Date.now()}`,
+      type: 'text',
+      content: titleSuggestions.elements.number,
+      x: 50,
+      y: canvasHeight - 100, // Bottom left
+      size: 64,
+      color: '#00BFFF', // Bright blue for numbers
+      styles: {
+        bold: true,
+        italic: false,
+        underline: false,
+        align: 'left',
+        shadow: true
+      }
+    });
+  }
+
+  // Detail element (small additional info)
+  if (titleSuggestions.elements.detail) {
+    elements.push({
+      id: `detail-${Date.now()}`,
+      type: 'text',
+      content: titleSuggestions.elements.detail,
+      x: canvasWidth - 250, // Right side, lower
+      y: canvasHeight - 50,
+      size: 18,
+      color: '#CCCCCC',
+      styles: {
+        bold: false,
+        italic: false,
+        underline: false,
+        align: 'right',
+        shadow: true
+      }
+    });
+  }
+
+  return elements;
+};

@@ -4,7 +4,7 @@ import ThumbnailPreview from './ThumbnailPreview';
 import ThumbnailControls from './ThumbnailControls';
 import ElementLibrary from './ElementLibrary';
 import BatchExportPanel from './BatchExportPanel';
-import VideoInput from './VideoInput';
+
 import { Sparkles, Download, Loader2, RefreshCw, Library, Sliders, Users, Image, Settings, Type, Blend, Youtube, Link } from 'lucide-react';
 import { saveAs } from 'file-saver';
 import { generateThumbnail } from '../modules/ai/dalleService';
@@ -50,7 +50,7 @@ const ThumbnailEditor: React.FC = () => {
   const [activeTab, setActiveTab] = useState<string>(videoData ? 'elements' : 'video');
   const [videoUrl, setVideoUrl] = useState('');
   const [loadingVideo, setLoadingVideo] = useState(false);
-  const [showAdvancedAnalyzer, setShowAdvancedAnalyzer] = useState(false);
+
 
   const handleEditElement = (id: string) => {
     setSelectedElementId(id);
@@ -236,21 +236,29 @@ const ThumbnailEditor: React.FC = () => {
   const handleGenerate = async () => {
     setGenerating(true);
     try {
+      // Enhanced generation options with channel style integration
+      const generationOptions = {
+        clickbaitIntensity: generationSettings.clickbaitIntensity,
+        variationCount: generationSettings.variationCount,
+        language: videoData.language.code,
+        selectedReferenceThumbnails,
+        contextSummary,
+        styleConsistency: videoData.styleConsistency || styleConsistency,
+        creativeDirection: generationSettings.creativeDirection,
+        costOptimization: generationSettings.costOptimization,
+        creatorType,
+        participants,
+        // Channel-specific enhancements
+        channelReference: videoData.channelReference,
+        channelStyleLikeness: videoData.styleConsistency,
+        useChannelBranding: !!videoData.channelReference,
+        bulkMode: false // Will be enhanced for bulk creation
+      };
+
       const results = await generateThumbnail(
         videoData,
         thumbnailElements,
-        {
-          clickbaitIntensity: generationSettings.clickbaitIntensity,
-          variationCount: generationSettings.variationCount,
-          language: videoData.language.code,
-          selectedReferenceThumbnails,
-          contextSummary,
-          styleConsistency,
-          creativeDirection: generationSettings.creativeDirection,
-          costOptimization: generationSettings.costOptimization,
-          creatorType,
-          participants
-        }
+        generationOptions
       );
       setVariations(results);
       setSelectedVariation(-1);
@@ -358,12 +366,7 @@ const ThumbnailEditor: React.FC = () => {
     return 'right';
   };
 
-  // Show advanced analyzer if requested
-  if (showAdvancedAnalyzer) {
-    return (
-      <VideoInput onClose={() => setShowAdvancedAnalyzer(false)} />
-    );
-  }
+
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 min-h-[calc(100vh-12rem)]">
@@ -392,6 +395,39 @@ const ThumbnailEditor: React.FC = () => {
             </div>
           )}
           
+          {/* Channel Info Banner */}
+          {videoData?.channelReference && (
+            <div className="mb-4 p-3 bg-gradient-to-r from-purple-900/30 to-blue-900/30 border border-purple-500/30 rounded-lg">
+              <div className="flex items-center space-x-3">
+                <Youtube className="w-5 h-5 text-red-500 flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center space-x-2">
+                    <h3 className="text-sm font-semibold text-white truncate">
+                      {videoData.channelReference.title}
+                    </h3>
+                    <span className="text-xs text-purple-300 bg-purple-500/20 px-2 py-0.5 rounded-full">
+                      Channel Style Active
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-300 mt-1">
+                    Style consistency: {Math.round((videoData.styleConsistency || 0.7) * 100)}% • 
+                    Using {videoData.channelReference.thumbnails.latest.length} reference thumbnails
+                  </p>
+                </div>
+                <div className="flex items-center space-x-1">
+                  {videoData.channelReference.thumbnails.latest.slice(0, 3).map((thumb, index) => (
+                    <img
+                      key={index}
+                      src={thumb}
+                      alt={`Reference ${index + 1}`}
+                      className="w-8 h-6 object-cover rounded border border-gray-600"
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
           {videoData ? (
             <ThumbnailPreview 
               videoTitle={thumbnailElements.length > 0 ? '' : videoData.title}
@@ -453,14 +489,7 @@ const ThumbnailEditor: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="mt-8 pt-6 border-t border-gray-700">
-                  <button 
-                    onClick={() => setShowAdvancedAnalyzer(true)}
-                    className="text-sm text-purple-400 hover:text-purple-300 transition-colors"
-                  >
-                    Need advanced options? Use full analyzer →
-                  </button>
-                </div>
+
               </div>
             </div>
           )}
@@ -680,16 +709,7 @@ const ThumbnailEditor: React.FC = () => {
                       </div>
                     </div>
                     
-                    <div className="pt-4 border-t border-gray-700">
-                      <div className="text-center">
-                        <button 
-                          onClick={() => setShowAdvancedAnalyzer(true)}
-                          className="text-sm text-purple-400 hover:text-purple-300 transition-colors"
-                        >
-                          Need advanced options? Use full analyzer →
-                        </button>
-                      </div>
-                    </div>
+
                   </div>
                 </div>
               </TabPanel>

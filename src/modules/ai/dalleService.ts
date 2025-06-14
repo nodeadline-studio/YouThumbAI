@@ -23,6 +23,11 @@ export interface GenerationOptions {
   enableFaceSwap?: boolean;
   previewImage?: string;
   blendMode?: boolean;
+  // Channel-specific options
+  channelReference?: any;
+  channelStyleLikeness?: number;
+  useChannelBranding?: boolean;
+  bulkMode?: boolean;
 }
 
 const STYLE_VARIATIONS = [
@@ -122,9 +127,14 @@ export const generateThumbnail = async (
       const styleIntensity = (options.styleConsistency || 100) / 100;
       
       // Incorporate reference thumbnails if provided
-      const channelStyleProfile = options.selectedReferenceThumbnails?.length
+      let channelStyleProfile = options.selectedReferenceThumbnails?.length
         ? await buildStyleProfile(options.selectedReferenceThumbnails)
         : null;
+      
+      // Use channel reference thumbnails if available and no specific references provided
+      if (!channelStyleProfile && options.channelReference?.thumbnails?.latest?.length) {
+        channelStyleProfile = await buildStyleProfile(options.channelReference.thumbnails.latest);
+      }
 
       const visualPrompt = await buildPrompt(
         videoData,
@@ -138,7 +148,9 @@ export const generateThumbnail = async (
         options.participants || [],
         { 
           blendMode: options.blendMode, 
-          elements: elements.length > 0 ? elements : undefined 
+          elements: elements.length > 0 ? elements : undefined,
+          channelReference: options.channelReference,
+          useChannelBranding: options.useChannelBranding
         }
       );
 
@@ -287,7 +299,12 @@ async function buildPrompt(
   culturalContext: string,
   creatorType: CreatorType | null,
   participants: Participant[],
-  options?: { blendMode?: boolean; elements?: ThumbnailElement[] }
+  options?: { 
+    blendMode?: boolean; 
+    elements?: ThumbnailElement[];
+    channelReference?: any;
+    useChannelBranding?: boolean;
+  }
 ): Promise<string> {
   // Generate focused creative direction
   const creativePrompt = await openai.chat.completions.create({
@@ -326,6 +343,12 @@ Style: ${variation.style} (${styleWeight * 100}% consistency with channel style)
 Emphasis: ${variation.emphasis}
 
 Cultural Context: ${culturalContext}
+
+${options?.channelReference && options?.useChannelBranding ? `
+Channel Branding Context: This is for "${options.channelReference.title}" channel. 
+Maintain visual consistency with their established style while creating fresh content.
+Reference thumbnails show their typical approach to composition, color, and mood.
+` : ''}
 
 ${participants.length > 0 ? getParticipantPlacement(participants) : ''}
 

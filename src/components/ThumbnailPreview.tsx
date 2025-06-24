@@ -530,27 +530,27 @@ const ThumbnailPreview: React.FC<ThumbnailPreviewProps> = ({
                         
                         {/* Multi-line Text Editor */}
                         <textarea
-                          value={element.content}
-                          onChange={(e) => {
-                            const updatedElements = thumbnailElements.map(el =>
-                              el.id === element.id ? { ...el, content: e.target.value } : el  
-                            );
-                            setThumbnailElements(updatedElements);
-                          }}
-                          onBlur={() => setEditingElement(null)}
+                        value={element.content}
+                        onChange={(e) => {
+                          const updatedElements = thumbnailElements.map(el =>
+                            el.id === element.id ? { ...el, content: e.target.value } : el  
+                          );
+                          setThumbnailElements(updatedElements);
+                        }}
+                        onBlur={() => setEditingElement(null)}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter' && e.ctrlKey) {
                               setEditingElement(null);
                             }
                             if (e.key === 'Escape') {
-                              setEditingElement(null);
-                            }
-                          }}
-                          autoFocus
+                            setEditingElement(null);
+                          }
+                        }}
+                        autoFocus
                           className="relative z-10 w-full min-w-[200px] min-h-[60px] px-4 py-2 bg-black/80 rounded-lg text-white border-2 border-purple-500 focus:outline-none focus:border-purple-400 resize-none overflow-hidden"
-                          style={{ 
-                            color: element.color || 'white',
-                            fontSize: `${element.size || 16}px`,
+                        style={{ 
+                          color: element.color || 'white',
+                          fontSize: `${element.size || 16}px`,
                             fontWeight: element.styles?.bold ? 'bold' : 'normal',
                             fontStyle: element.styles?.italic ? 'italic' : 'normal',
                             textAlign: element.styles?.align || 'left',
@@ -645,13 +645,13 @@ const ThumbnailPreview: React.FC<ThumbnailPreviewProps> = ({
                           {/* Enhanced Control Buttons */}
                           <div className="absolute -top-10 left-0 flex items-center space-x-1 pointer-events-auto">
                             <div className="bg-black/90 rounded-lg px-2 py-1 border border-purple-500/50 flex items-center space-x-1">
-                              <button
-                                onClick={(e) => handleDuplicateElement(element.id, e)}
+                            <button
+                              onClick={(e) => handleDuplicateElement(element.id, e)}
                                 className="w-6 h-6 bg-blue-500 hover:bg-blue-400 rounded text-white flex items-center justify-center transition-colors"
                                 title="Duplicate (Ctrl+D)"
-                              >
-                                <Copy className="w-3 h-3" />
-                              </button>
+                            >
+                              <Copy className="w-3 h-3" />
+                            </button>
                               <button
                                 onClick={(e) => setEditingElement(element.id)}
                                 className="w-6 h-6 bg-purple-500 hover:bg-purple-400 rounded text-white flex items-center justify-center transition-colors"
@@ -659,13 +659,13 @@ const ThumbnailPreview: React.FC<ThumbnailPreviewProps> = ({
                               >
                                 <Type className="w-3 h-3" />
                               </button>
-                              <button
-                                onClick={(e) => handleDeleteElement(element.id, e)}
+                            <button
+                              onClick={(e) => handleDeleteElement(element.id, e)}
                                 className="w-6 h-6 bg-red-500 hover:bg-red-400 rounded text-white flex items-center justify-center transition-colors"
-                                title="Delete (Del)"
-                              >
-                                <X className="w-3 h-3" />
-                              </button>
+                              title="Delete (Del)"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
                             </div>
                           </div>
                           

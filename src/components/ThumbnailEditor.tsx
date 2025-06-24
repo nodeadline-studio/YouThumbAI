@@ -1,14 +1,22 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useVideoStore } from '../store/videoStore';
 import ThumbnailPreview from './ThumbnailPreview';
 import ThumbnailControls from './ThumbnailControls';
 import ElementLibrary from './ElementLibrary';
 import BatchExportPanel from './BatchExportPanel';
 import ExportMenu from './ExportMenu';
+import LoadingState from './LoadingState';
 
-import { Sparkles, Download, Loader2, RefreshCw, Library, Sliders, Users, Image, Settings, Type, Blend, Youtube, Link } from 'lucide-react';
+import { 
+  Sparkles, Download, Loader2, RefreshCw, Library, Sliders, Users, Image, Settings, 
+  Type, Blend, Youtube, Link, Home, Maximize2, Minimize2, RotateCcw, Share2,
+  Play, Camera, Zap, TrendingUp, Eye, Heart, MessageCircle, ArrowLeft,
+  PanelLeftOpen, PanelLeftClose, Monitor, Tablet, Smartphone
+} from 'lucide-react';
 import { saveAs } from 'file-saver';
 import { generateThumbnail } from '../modules/ai/dalleService';
+import { generateEnhancedThumbnails, analyzeVideoScreenshots, checkSpelling, SUPPORTED_LANGUAGES } from '../modules/ai/enhancedGenerationService';
+import { extractFacesFromImage, generateWithLora } from '../modules/ai/replicateService';
 import { Tabs, TabList, Tab, TabPanel } from './Tabs';
 import PeopleExtractor from './PeopleExtractor';
 import SubtitleGenerator from './SubtitleGenerator';
@@ -22,6 +30,9 @@ interface ThumbnailVariation {
   url: string;
   label: string;
 }
+
+type ViewMode = 'desktop' | 'tablet' | 'mobile';
+type PanelMode = 'collapsed' | 'overlay' | 'side';
 
 const ThumbnailEditor: React.FC = () => {
   const { 
@@ -40,24 +51,64 @@ const ThumbnailEditor: React.FC = () => {
     updateParticipant
   } = useVideoStore();
   
+  // Core state
   const [generating, setGenerating] = useState(false);
   const [variations, setVariations] = useState<ThumbnailVariation[]>([]);
   const [selectedVariation, setSelectedVariation] = useState<number>(-1);
+  
+  // Enhanced generation states
+  const [enhancedMode, setEnhancedMode] = useState(false);
+  const [videoScreenshots, setVideoScreenshots] = useState<string[]>([]);
+  const [selectedLanguages, setSelectedLanguages] = useState<string[]>(['en']);
+  const [extractedFaces, setExtractedFaces] = useState<any[]>([]);
+  const [selectedLora, setSelectedLora] = useState<string>('');
+  const [spellCheckResults, setSpellCheckResults] = useState<Record<string, any>>({});
+  const [localVideoFile, setLocalVideoFile] = useState<File | null>(null);
   const [exporting, setExporting] = useState(false);
-  const [regenerating, setRegenerating] = useState(false);
-  const [blendRegenerating, setBlendRegenerating] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  
+  // UI state for mobile-first design
+  const [viewMode, setViewMode] = useState<ViewMode>('desktop');
+  const [panelMode, setPanelMode] = useState<PanelMode>('side');
+  const [activePanel, setActivePanel] = useState<'generate' | 'elements' | 'people' | 'export'>('generate');
+  const [isPreviewFullscreen, setIsPreviewFullscreen] = useState(false);
+  
+  // Active element editing
   const [selectedElementId, setSelectedElementId] = useState<string | null>(null);
   const [showElementControls, setShowElementControls] = useState(false);
-  const [activeTab, setActiveTab] = useState<string>(videoData ? 'elements' : 'video');
-  const [videoUrl, setVideoUrl] = useState('');
-  const [loadingVideo, setLoadingVideo] = useState(false);
-  const [showExportMenu, setShowExportMenu] = useState(false);
+  
+  // Quick actions state
+  const [quickActionsOpen, setQuickActionsOpen] = useState(false);
 
+  // Responsive layout detection
+  useEffect(() => {
+    const handleResize = () => {
+      const width = window.innerWidth;
+      if (width < 768) {
+        setViewMode('mobile');
+        setPanelMode('overlay');
+      } else if (width < 1024) {
+        setViewMode('tablet');
+        setPanelMode('overlay');
+      } else {
+        setViewMode('desktop');
+        setPanelMode('side');
+      }
+    };
+
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const handleEditElement = (id: string) => {
     setSelectedElementId(id);
     setShowElementControls(true);
-    setActiveTab('controls');
+    setActivePanel('elements');
+  };
+
+  const handleBackToHome = () => {
+    setVideoData(null);
   };
 
   if (!videoData) {
@@ -69,72 +120,44 @@ const ThumbnailEditor: React.FC = () => {
     setShowElementControls(false);
   };
 
-  const handleVideoLoad = async () => {
-    if (!videoUrl.trim()) return;
-
-    setLoadingVideo(true);
+  const handleGenerate = async () => {
+    setGenerating(true);
     try {
-      const videoId = extractVideoId(videoUrl);
-      if (!videoId) {
-        throw new Error('Invalid YouTube URL');
-      }
-
-      const apiKey = import.meta.env.VITE_YOUTUBE_API_KEY;
-      if (!apiKey) {
-        throw new Error('YouTube API key not configured');
-      }
-
-      const videoDataResult = await getVideoMetadata(videoId, apiKey);
-      setVideoData(videoDataResult);
-      setVideoUrl('');
-      setActiveTab('elements'); // Switch to elements tab after loading
-    } catch (error) {
-      console.error('Error loading video:', error);
-      alert('Failed to load video. Please check the URL and try again.');
-    } finally {
-      setLoadingVideo(false);
-    }
-  };
-
-  const handleCreateBlankTemplate = () => {
-    // Create a blank template with minimal data
-    const blankTemplate = {
-      id: 'blank-template',
-      title: 'Custom Thumbnail',
-      description: 'Create your custom thumbnail from scratch',
-      channelTitle: 'Custom Creator',
-      publishedAt: new Date().toISOString(),
-      duration: '0:00',
-      viewCount: '0',
-      likeCount: '0',
-      commentCount: '0',
-      thumbnailUrl: '',
-      channelId: 'blank',
-      tags: ['custom'],
-      categoryId: '0',
-      language: { code: 'en', name: 'English', direction: 'ltr' as const },
-      isLiveContent: false,
-      typography: {
-        direction: 'ltr' as const,
-        fontFamily: 'Arial, sans-serif'
-      }
-    };
-    
-    setVideoData(blankTemplate);
-    setActiveTab('elements'); // Switch to elements tab after creating blank
-  };
-
-  const handleRegenerate = async () => {
-    if (selectedVariation === -1) return;
-    
-    setRegenerating(true);
-    try {
-      const result = await generateThumbnail(
+      let result;
+      
+      if (enhancedMode) {
+        // Use enhanced generation with local analysis and multi-language support
+        const enhancedResult = await generateEnhancedThumbnails(
         videoData,
         thumbnailElements,
         {
           clickbaitIntensity: generationSettings.clickbaitIntensity,
-          variationCount: 1,
+            variationCount: generationSettings.variationCount,
+            creatorType: creatorType || undefined,
+            participants,
+            videoFile: localVideoFile || undefined,
+            videoScreenshots: videoScreenshots.length > 0 ? videoScreenshots : undefined,
+            targetLanguages: selectedLanguages,
+            faceSwapEnabled: generationSettings.enableFaceSwap,
+          costOptimization: generationSettings.costOptimization,
+            mobileOptimized: viewMode === 'mobile'
+          }
+        );
+        
+        // Convert enhanced results to standard format
+        result = enhancedResult.map(item => ({
+          url: item.url,
+          label: item.label,
+          prompt: `Enhanced: ${item.language} (Confidence: ${(item.confidence * 100).toFixed(0)}%)`
+        }));
+      } else {
+        // Standard generation
+        result = await generateThumbnail(
+        videoData,
+        thumbnailElements,
+        {
+          clickbaitIntensity: generationSettings.clickbaitIntensity,
+          variationCount: generationSettings.variationCount,
           language: videoData.language.code,
           selectedReferenceThumbnails,
           contextSummary,
@@ -142,130 +165,19 @@ const ThumbnailEditor: React.FC = () => {
           creativeDirection: generationSettings.creativeDirection,
           costOptimization: generationSettings.costOptimization,
           creatorType,
-          participants
-        }
-      );
-      
-      // Replace the selected variation with the new one
-      const newVariations = [...variations];
-      newVariations[selectedVariation] = result[0];
-      setVariations(newVariations);
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to regenerate thumbnail';
-      alert(errorMessage);
-    } finally {
-      setRegenerating(false);
-    }
-  };
-
-  const capturePreviewWithElements = async (): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const previewElement = document.querySelector('[data-thumbnail-preview]') as HTMLElement;
-      if (!previewElement) {
-        reject(new Error('Preview element not found'));
-        return;
+            participants,
+            enableFaceSwap: generationSettings.enableFaceSwap
+          }
+        );
       }
-
-                    // Use html2canvas for high-quality capture
-       import('html2canvas').then(html2canvas => {
-         html2canvas.default(previewElement, {
-           useCORS: true,
-           allowTaint: true
-         }).then(canvas => {
-           const dataURL = canvas.toDataURL('image/png', 1.0);
-           resolve(dataURL);
-         }).catch(reject);
-       }).catch(reject);
-    });
-  };
-
-  const handleRegenerateWithElements = async () => {
-    if (selectedVariation === -1 || thumbnailElements.length === 0) {
-      alert('Please select a variation and add some elements first');
-      return;
-    }
-    
-    setBlendRegenerating(true);
-    try {
-      // Capture current preview with elements
-      const previewImage = await capturePreviewWithElements();
       
-      // Create enhanced prompt that includes the elements
-      const elementDescriptions = thumbnailElements.map(el => {
-        if (el.type === 'text') {
-          return `Text element "${el.content}" at ${el.x}%, ${el.y}% with ${el.size}px font size in ${el.color} color`;
-        } else if (el.type === 'image') {
-          return `Image element at ${el.x}%, ${el.y}% with ${el.size}px size`;
-        }
-        return '';
-      }).filter(Boolean).join(', ');
-
-      const result = await generateThumbnail(
-        videoData,
-        thumbnailElements,
-        {
-          clickbaitIntensity: generationSettings.clickbaitIntensity,
-          variationCount: 1,
-          language: videoData.language.code,
-          selectedReferenceThumbnails,
-          contextSummary: `${contextSummary}\n\nBLEND ELEMENTS: Naturally integrate these overlay elements into the scene: ${elementDescriptions}. Make text look like it's painted or burned into the scene, make images look like they belong in the environment. The goal is to make everything look cohesive and professionally composed, not overlaid.`,
-          styleConsistency,
-          creativeDirection: generationSettings.creativeDirection,
-          costOptimization: generationSettings.costOptimization,
-          creatorType,
-          participants,
-          previewImage, // Pass the captured preview
-          blendMode: true // Special flag for element blending
-        }
-      );
-      
-      // Replace the selected variation with the new one
-      const newVariations = [...variations];
-      newVariations[selectedVariation] = result[0];
-      setVariations(newVariations);
-      
-      // Clear elements since they're now part of the image
-      setThumbnailElements([]);
-      
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to regenerate with elements';
-      alert(errorMessage);
-    } finally {
-      setBlendRegenerating(false);
-    }
-  };
-
-  const handleGenerate = async () => {
-    setGenerating(true);
-    try {
-      // Enhanced generation options with channel style integration
-      const generationOptions = {
-        clickbaitIntensity: generationSettings.clickbaitIntensity,
-        variationCount: generationSettings.variationCount,
-        language: videoData.language.code,
-        selectedReferenceThumbnails,
-        contextSummary,
-        styleConsistency: videoData.styleConsistency || styleConsistency,
-        creativeDirection: generationSettings.creativeDirection,
-        costOptimization: generationSettings.costOptimization,
-        creatorType,
-        participants,
-        // Channel-specific enhancements
-        channelReference: videoData.channelReference,
-        channelStyleLikeness: videoData.styleConsistency,
-        useChannelBranding: !!videoData.channelReference,
-        bulkMode: false // Will be enhanced for bulk creation
-      };
-
-      const results = await generateThumbnail(
-        videoData,
-        thumbnailElements,
-        generationOptions
-      );
-      setVariations(results);
-      setSelectedVariation(-1);
+      setVariations(result);
+      if (result.length > 0) {
+        setSelectedVariation(0);
+      }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to generate thumbnail';
+      console.error('Generation error:', err);
       alert(errorMessage);
     } finally {
       setGenerating(false);
@@ -276,519 +188,409 @@ const ThumbnailEditor: React.FC = () => {
     setShowExportMenu(true);
   };
 
-  // Handle canvas drop events for text and people elements
-  const handleCanvasDrop = (dataTransfer: DataTransfer, x: number, y: number) => {
-    try {
-      const data = JSON.parse(dataTransfer.getData('text/plain'));
-      
-      if (data.type === 'text') {
-        // Add text element
-        const newElement: ThumbnailElement = {
-          id: `text-${Date.now()}`,
-          type: 'text' as ThumbnailElementType,
-          content: data.content,
-          x,
-          y,
-          size: data.style === 'title' ? 32 : 24,
-          color: '#ffffff',
-          styles: {
-            bold: data.style === 'highlight' || data.style === 'number',
-            italic: data.style === 'question',
-            underline: false,
-            align: 'center',
-            shadow: true
-          }
-        };
-        
-        setThumbnailElements([...thumbnailElements, newElement]);
-      } 
-      else if (data.type === 'person') {
-        // Check if we already have this person in participants
-        const existingPersonIndex = participants.findIndex(p => p.id === data.id);
-        
-        // Calculate position based on drop coordinates
-        const position = calculatePositionFromX(x);
-        
-        if (existingPersonIndex >= 0) {
-          // Update existing person's position
-          updateParticipant(existingPersonIndex, { position });
-        } else {
-          // Add as new participant
-          addParticipant({
-            id: data.id,
-            name: data.name || 'Unnamed Person',
-            imageUrl: data.imageUrl,
-            position,
-            emphasis: 'primary'
-          });
-        }
-      }
-    } catch (error) {
-      console.error('Error handling drop:', error);
+  const togglePreviewFullscreen = () => {
+    setIsPreviewFullscreen(!isPreviewFullscreen);
+  };
+
+  const togglePanel = () => {
+    if (panelMode === 'collapsed') {
+      setPanelMode(viewMode === 'desktop' ? 'side' : 'overlay');
+    } else {
+      setPanelMode('collapsed');
     }
   };
-  
-  // Helper to calculate position string from x coordinate
-  const calculatePositionFromX = (x: number): 'left' | 'center' | 'right' => {
-    // This assumes the canvas width is 1280px (16:9 ratio for 720p height)
-    // Adjust these values based on your actual canvas size
-    const canvasWidth = 1280;
-    const third = canvasWidth / 3;
-    
-    if (x < third) return 'left';
-    if (x < third * 2) return 'center';
-    return 'right';
+
+  // Enhanced functionality handlers
+  const handleVideoFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file && file.type.startsWith('video/')) {
+      setLocalVideoFile(file);
+      // Auto-enable enhanced mode when video is uploaded
+      setEnhancedMode(true);
+    }
   };
 
+  const handleScreenshotUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || []);
+    files.forEach(file => {
+      if (file.type.startsWith('image/')) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          if (e.target?.result) {
+            setVideoScreenshots(prev => [...prev, e.target!.result as string]);
+          }
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+  };
 
+  const handleFaceExtraction = async () => {
+    if (!videoData?.thumbnailUrl) return;
+    
+    try {
+      const faces = await extractFacesFromImage(videoData.thumbnailUrl);
+      setExtractedFaces(faces);
+    } catch (error) {
+      console.error('Face extraction failed:', error);
+    }
+  };
+
+  const handleSpellCheck = async (text: string, language: string) => {
+    try {
+      const result = await checkSpelling(text, language);
+      setSpellCheckResults(prev => ({
+        ...prev,
+        [text]: result
+      }));
+    } catch (error) {
+      console.error('Spell check failed:', error);
+    }
+  };
+
+  const handleLanguageToggle = (langCode: string) => {
+    setSelectedLanguages(prev => 
+      prev.includes(langCode) 
+        ? prev.filter(l => l !== langCode)
+        : [...prev, langCode]
+    );
+  };
+
+  // Quick action buttons for mobile
+  const quickActions = [
+    { icon: Sparkles, label: 'Generate', action: handleGenerate, color: 'bg-purple-600', loading: generating },
+    { icon: Download, label: 'Export', action: handleExport, color: 'bg-green-600' },
+    { icon: RefreshCw, label: 'Reset', action: () => setThumbnailElements([]), color: 'bg-red-600' },
+    { icon: Eye, label: 'Preview', action: togglePreviewFullscreen, color: 'bg-blue-600' }
+  ];
+
+  // Panel content based on active panel
+  const renderPanelContent = () => {
+    switch (activePanel) {
+      case 'generate':
+  return (
+          <div className="h-full flex flex-col">
+            <div className="p-4 border-b border-gray-700">
+              <h3 className="text-lg font-semibold flex items-center">
+                <Sparkles className="w-5 h-5 mr-2 text-purple-400" />
+                Generate Thumbnails
+              </h3>
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              <GenerationPanel />
+                  </div>
+                </div>
+        );
+      
+      case 'elements':
+        return (
+          <div className="h-full flex flex-col">
+            <div className="p-4 border-b border-gray-700">
+              <h3 className="text-lg font-semibold flex items-center">
+                <Library className="w-5 h-5 mr-2 text-blue-400" />
+                Element Library
+              </h3>
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              <ElementLibrary />
+              {showElementControls && selectedElementId && (
+                <div className="border-t border-gray-700 mt-4">
+                                     <ThumbnailControls
+                     selectedElementId={selectedElementId}
+                     showElementControls={showElementControls}
+                     onClose={handleCloseElementControls}
+                   />
+                </div>
+              )}
+                    </div>
+                  </div>
+        );
+      
+      case 'people':
+        return (
+          <div className="h-full flex flex-col">
+            <div className="p-4 border-b border-gray-700">
+              <h3 className="text-lg font-semibold flex items-center">
+                <Users className="w-5 h-5 mr-2 text-orange-400" />
+                People & Characters
+              </h3>
+                    </div>
+            <div className="flex-1 overflow-y-auto">
+              <PeopleExtractor />
+              <div className="mt-4">
+                <CreatorTypeSelector />
+                    </div>
+                  </div>
+                </div>
+        );
+      
+      case 'export':
+        return (
+          <div className="h-full flex flex-col">
+            <div className="p-4 border-b border-gray-700">
+              <h3 className="text-lg font-semibold flex items-center">
+                <Download className="w-5 h-5 mr-2 text-green-400" />
+                Export & Share
+              </h3>
+                </div>
+            <div className="flex-1 overflow-y-auto">
+              <BatchExportPanel />
+              <div className="mt-4">
+                <CostOptimizationPanel />
+              </div>
+            </div>
+          </div>
+        );
+      
+      default:
+        return null;
+    }
+  };
+
+  // Panel navigation tabs
+  const panelTabs = [
+    { id: 'generate', icon: Sparkles, label: 'Generate', color: 'text-purple-400' },
+    { id: 'elements', icon: Library, label: 'Elements', color: 'text-blue-400' },
+    { id: 'people', icon: Users, label: 'People', color: 'text-orange-400' },
+    { id: 'export', icon: Download, label: 'Export', color: 'text-green-400' }
+  ];
 
   return (
-    <div data-testid="thumbnail-editor" className="grid grid-cols-1 lg:grid-cols-4 gap-6 min-h-[calc(100vh-12rem)]">
-      <div className="lg:col-span-3 order-2 lg:order-1">
-        <div className="bg-gray-800 bg-opacity-60 backdrop-blur-lg rounded-xl border border-gray-700 p-4">
-          {variations.length > 0 && (
-            <div className="mb-6 grid grid-cols-3 gap-4">
-              {variations.map((variation, index) => (
-                <div
-                  key={index}
-                  className={`relative rounded-lg overflow-hidden cursor-pointer transition-all duration-200 ${
-                    selectedVariation === index ? 'ring-4 ring-purple-500 scale-[1.02]' : 'hover:ring-2 hover:ring-purple-400'
-                  }`}
-                  onClick={() => setSelectedVariation(index)}
-                >
-                  <img
-                    src={variation.url}
-                    alt={variation.label}
-                    className="w-full h-auto"
-                  />
-                  <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-75 text-white text-xs p-2">
-                    {variation.label}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-          
-          {/* Channel Info Banner */}
-          {videoData?.channelReference && (
-            <div className="mb-4 p-3 bg-gradient-to-r from-purple-900/30 to-blue-900/30 border border-purple-500/30 rounded-lg">
-              <div className="flex items-center space-x-3">
-                <Youtube className="w-5 h-5 text-red-500 flex-shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center space-x-2">
-                    <h3 className="text-sm font-semibold text-white truncate">
-                      {videoData.channelReference.title}
-                    </h3>
-                    <span className="text-xs text-purple-300 bg-purple-500/20 px-2 py-0.5 rounded-full">
-                      Channel Style Active
-                    </span>
-                  </div>
-                  <p className="text-xs text-gray-300 mt-1">
-                    Style consistency: {Math.round((videoData.styleConsistency || 0.7) * 100)}% • 
-                    Using {videoData.channelReference.thumbnails.latest.length} reference thumbnails
-                  </p>
-                </div>
-                <div className="flex items-center space-x-1">
-                  {videoData.channelReference.thumbnails.latest.slice(0, 3).map((thumb, index) => (
-                    <img
-                      key={index}
-                      src={thumb}
-                      alt={`Reference ${index + 1}`}
-                      className="w-8 h-6 object-cover rounded border border-gray-600"
-                    />
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {videoData ? (
-            <ThumbnailPreview 
-              videoTitle={thumbnailElements.length > 0 ? '' : videoData.title}
-              videoTypography={videoData.typography}
-              elements={thumbnailElements} 
-              onElementsChange={setThumbnailElements}
-              generatedImage={selectedVariation !== -1 ? variations[selectedVariation].url : null}
-              isGenerating={generating}
-              onDrop={handleCanvasDrop}
-              data-testid="thumbnail-canvas"
-              data-thumbnail-preview
-            />
-          ) : (
-            <div className="bg-gray-800 bg-opacity-60 backdrop-blur-lg rounded-xl border border-gray-700 p-8 text-center">
-              <div className="max-w-lg mx-auto">
-                <Image className="w-16 h-16 text-gray-500 mx-auto mb-6" />
-                <h2 className="text-2xl font-bold mb-4 bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
-                  Thumbnail Studio
-                </h2>
-                <p className="text-gray-400 mb-8 leading-relaxed">
-                  Create professional thumbnails with AI-powered design. Start with a blank canvas or load a YouTube video.
-                </p>
-                
-                <div className="flex flex-col sm:flex-row gap-4 mb-8">
-                  <button 
-                    onClick={handleCreateBlankTemplate}
-                    className="flex-1 px-6 py-4 bg-gradient-to-r from-purple-600 to-blue-500 hover:from-purple-700 hover:to-blue-600 rounded-lg text-white font-medium transition-all duration-300 transform hover:scale-105"
-                  >
-                    <Image className="w-5 h-5 mx-auto mb-2" />
-                    Start with Blank Canvas
-                  </button>
-                  
-                  <button 
-                    onClick={() => setActiveTab('video')}
-                    className="flex-1 px-6 py-4 bg-gray-700 hover:bg-gray-600 rounded-lg text-white font-medium transition-all duration-300"
-                  >
-                    <Youtube className="w-5 h-5 mx-auto mb-2" />
-                    Load YouTube Video
-                  </button>
-                </div>
-                
-                <div className="mt-8 grid grid-cols-3 gap-4 text-sm text-gray-400">
-                  <div className="text-center">
-                    <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-2">
-                      <span className="text-white font-bold text-xs">1</span>
-                    </div>
-                    <p>Start Creating</p>
-                  </div>
-                  <div className="text-center">
-                    <div className="w-8 h-8 bg-purple-500 rounded-full flex items-center justify-center mx-auto mb-2">
-                      <span className="text-white font-bold text-xs">2</span>
-                    </div>
-                    <p>Design & AI</p>
-                  </div>
-                  <div className="text-center">
-                    <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center mx-auto mb-2">
-                      <span className="text-white font-bold text-xs">3</span>
-                    </div>
-                    <p>Export</p>
-                  </div>
-                </div>
-
-
-              </div>
-            </div>
-          )}
-          
-          <div className="mt-6 flex flex-wrap gap-4 justify-center">
-            <div className="flex items-center gap-2 mr-4">
-              <label className="text-sm text-gray-300">Variations:</label>
-              <select
-                value={generationSettings.variationCount}
-                onChange={(e) => updateGenerationSettings({ variationCount: Number(e.target.value) as 1 | 2 | 3 })}
-                className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm text-white"
-              >
-                <option value={1}>1</option>
-                <option value={2}>2</option>
-                <option value={3}>3</option>
-              </select>
-            </div>
-            
+    <div className="h-full flex flex-col bg-gray-900">
+      {/* Mobile/Tablet Header */}
+      <div className="flex items-center justify-between p-4 bg-gray-800 border-b border-gray-700 lg:hidden">
             <button
-              className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded-lg font-medium flex items-center justify-center transition-colors duration-300"
-              onClick={handleGenerate}
-              disabled={generating}
-            >
-              {generating ? (
-                <>
-                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                  Generating...
-                </>
-              ) : (
-                <>
-                  <Sparkles className="w-5 h-5 mr-2" />
-                  Generate Thumbnails
-                </>
-              )}
+          onClick={handleBackToHome}
+          className="flex items-center text-gray-300 hover:text-white transition-colors"
+        >
+          <ArrowLeft className="w-5 h-5 mr-2" />
+          Back
             </button>
             
-            {variations.length > 0 && selectedVariation !== -1 && (
-              <>
+        <div className="flex items-center space-x-2">
+          <span className="text-sm text-gray-400">
+            {videoData.title.length > 30 ? videoData.title.substring(0, 30) + '...' : videoData.title}
+          </span>
+        </div>
+
+        <div className="flex items-center space-x-2">
                                   <button
-                    className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium flex items-center justify-center transition-colors duration-300"
-                    onClick={handleRegenerate}
-                    disabled={regenerating}
-                  >
-                    {regenerating ? (
-                      <>
-                        <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                        Regenerating...
-                      </>
-                    ) : (
-                      <>
-                        <RefreshCw className="w-5 h-5 mr-2" />
-                        Regenerate
-                      </>
-                    )}
+            onClick={togglePanel}
+            className="p-2 text-gray-300 hover:text-white transition-colors"
+          >
+            {panelMode === 'collapsed' ? <PanelLeftOpen className="w-5 h-5" /> : <PanelLeftClose className="w-5 h-5" />}
                   </button>
                 
                 <button
-                  data-testid="export-button"
-                  className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg font-medium flex items-center justify-center transition-colors duration-300"
-                  onClick={handleExport}
-                  disabled={exporting}
-                >
-                  {exporting ? (
-                    <>
-                      <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                      Exporting...
-                    </>
-                  ) : (
-                    <>
-                      <Download className="w-5 h-5 mr-2" />
-                      Export
-                    </>
-                  )}
+            onClick={togglePreviewFullscreen}
+            className="p-2 text-gray-300 hover:text-white transition-colors"
+          >
+            {isPreviewFullscreen ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
                 </button>
-              </>
-            )}
+        </div>
+      </div>
 
-            {/* FIXED: Blend Elements button only shows after generation AND when elements exist */}
-            {thumbnailElements.length > 0 && variations.length > 0 && selectedVariation !== -1 && (
-              <div className="relative group">
+      {/* Main Editor Layout */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Desktop Sidebar Panel */}
+        {(panelMode === 'side' && viewMode === 'desktop') && (
+          <div className="w-80 bg-gray-800 border-r border-gray-700 flex flex-col">
+            {/* Panel Navigation */}
+            <div className="flex border-b border-gray-700">
+              {panelTabs.map((tab) => (
                 <button
-                  className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white px-6 py-2 rounded-lg font-medium flex items-center justify-center transition-all duration-300 transform hover:scale-105"
-                  onClick={handleRegenerateWithElements}
-                  disabled={blendRegenerating}
-                  title="Blend elements naturally into the image"
+                  key={tab.id}
+                  onClick={() => setActivePanel(tab.id as any)}
+                  className={`flex-1 p-3 text-sm font-medium transition-colors border-b-2 ${
+                    activePanel === tab.id
+                      ? `${tab.color} border-current`
+                      : 'text-gray-400 hover:text-gray-300 border-transparent'
+                  }`}
                 >
-                  {blendRegenerating ? (
-                    <>
-                      <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                      Blending Elements...
-                    </>
-                  ) : (
-                    <>
-                      <Blend className="w-5 h-5 mr-2" />
-                      Blend Elements
-                    </>
-                  )}
+                  <tab.icon className="w-4 h-4 mx-auto mb-1" />
+                  <div className="hidden lg:block">{tab.label}</div>
                 </button>
-                
-                {/* Enhanced Tooltip */}
-                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-3 bg-black bg-opacity-95 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
-                  <div className="font-semibold mb-2 text-purple-300">🎨 Blend Elements</div>
-                  <div className="text-gray-200 leading-relaxed">
-                    Captures your current preview and regenerates the image with text/shapes naturally integrated into the scene - making them look like they belong in the original photo!
-                  </div>
-                  <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-black"></div>
+              ))}
+            </div>
+            
+            {/* Panel Content */}
+            <div className="flex-1 overflow-hidden">
+              {renderPanelContent()}
                 </div>
               </div>
             )}
 
-            {/* Enhanced Help text for blend feature */}
-            {thumbnailElements.length > 0 && variations.length > 0 && selectedVariation !== -1 && !blendRegenerating && (
-              <div className="w-full mt-4 p-4 bg-gradient-to-r from-purple-900/30 to-pink-900/30 border border-purple-500/30 rounded-lg">
-                <div className="flex items-start space-x-3">
-                  <Sparkles className="w-5 h-5 text-purple-400 mt-0.5 flex-shrink-0" />
-                  <div className="text-sm">
-                    <div className="font-semibold text-purple-300 mb-2">Pro Tip: Blend Elements</div>
-                    <div className="text-gray-300 leading-relaxed">
-                      Use "Blend Elements" to make your text and graphics look naturally integrated into the scene - 
-                      as if they were painted, carved, or originally part of the image. Perfect for professional-looking thumbnails!
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
+        {/* Preview Area */}
+        <div className={`flex-1 flex flex-col ${isPreviewFullscreen ? 'fixed inset-0 z-50 bg-gray-900' : ''}`}>
+          {/* Desktop Header */}
+          <div className="hidden lg:flex items-center justify-between p-4 bg-gray-800 border-b border-gray-700">
+            <div className="flex items-center space-x-4">
+              <button
+                onClick={handleBackToHome}
+                className="flex items-center text-gray-300 hover:text-white transition-colors"
+              >
+                <Home className="w-5 h-5 mr-2" />
+                Home
+              </button>
+              
+              <div className="text-sm text-gray-400">
+                {videoData.channelTitle} • {videoData.title}
         </div>
       </div>
       
-      <div className="col-span-1 order-1 lg:order-2">
-        <div data-testid="sidebar" className="bg-gray-800 bg-opacity-60 backdrop-blur-lg rounded-xl border border-gray-700 overflow-hidden">
-          <Tabs defaultTab={activeTab} onChange={setActiveTab}>
-            <TabList>
-              {!videoData && (
-                <Tab id="video">
-                  <Youtube className="w-4 h-4 mr-1" />
-                  <span className="text-xs">Video</span>
-                </Tab>
-              )}
-              <Tab id="elements">
-                <Library className="w-4 h-4 mr-1" />
-                <span className="text-xs">Elements</span>
-              </Tab>
-              <Tab id="people">
-                <Users className="w-4 h-4 mr-1" />
-                <span className="text-xs">People</span>
-              </Tab>
-              <Tab id="settings">
-                <Settings className="w-4 h-4 mr-1" />
-                <span className="text-xs">Settings</span>
-              </Tab>
-              <Tab id="export">
-                <Download className="w-4 h-4 mr-1" />
-                <span className="text-xs">Export</span>
-              </Tab>
-              <Tab id="generate">
-                <Sparkles className="w-4 h-4 mr-1" />
-                <span className="text-xs">Generate</span>
-              </Tab>
-            </TabList>
-            
-            {!videoData && (
-              <TabPanel id="video">
-                <div className="p-4">
-                  <div className="text-center mb-6">
-                    <h3 className="text-lg font-semibold mb-2 text-gray-200">Start Creating</h3>
-                    <p className="text-sm text-gray-400">Choose how you want to begin your thumbnail</p>
-                  </div>
-                  
-                  <div className="space-y-4">
-                    {/* Blank Canvas Option - Primary */}
-                    <div className="bg-gradient-to-r from-purple-600/20 to-blue-600/20 border border-purple-500/30 rounded-lg p-4">
-                      <div className="text-center mb-3">
-                        <div className="w-12 h-12 bg-gradient-to-r from-purple-600 to-blue-500 rounded-full flex items-center justify-center mx-auto mb-3">
-                          <Image className="w-6 h-6 text-white" />
-                        </div>
-                        <h4 className="font-semibold text-white mb-1">Start with Blank Canvas</h4>
-                        <p className="text-xs text-gray-300">Perfect for custom designs and creative freedom</p>
-                      </div>
+            <div className="flex items-center space-x-2">
+              {/* View mode selector */}
+              <div className="flex bg-gray-700 rounded-lg p-1">
+                <button
+                  onClick={() => setViewMode('desktop')}
+                  className={`p-2 rounded transition-colors ${viewMode === 'desktop' ? 'bg-gray-600 text-white' : 'text-gray-400 hover:text-gray-300'}`}
+                >
+                  <Monitor className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setViewMode('tablet')}
+                  className={`p-2 rounded transition-colors ${viewMode === 'tablet' ? 'bg-gray-600 text-white' : 'text-gray-400 hover:text-gray-300'}`}
+                >
+                  <Tablet className="w-4 h-4" />
+                </button>
                       <button
-                        onClick={handleCreateBlankTemplate}
-                        className="w-full py-3 bg-gradient-to-r from-purple-600 to-blue-500 hover:from-purple-700 hover:to-blue-600 rounded-lg text-white font-medium transition-all duration-300 transform hover:scale-105"
+                  onClick={() => setViewMode('mobile')}
+                  className={`p-2 rounded transition-colors ${viewMode === 'mobile' ? 'bg-gray-600 text-white' : 'text-gray-400 hover:text-gray-300'}`}
                       >
-                        Create Blank Thumbnail
+                  <Smartphone className="w-4 h-4" />
                       </button>
                     </div>
 
-                    <div className="text-center text-sm text-gray-400">
-                      <span>or</span>
-                    </div>
-
-                    {/* YouTube Video Option */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">
-                        Load from YouTube Video
-                      </label>
-                      <div className="flex gap-2">
-                        <input
-                          type="text"
-                          value={videoUrl}
-                          onChange={(e) => setVideoUrl(e.target.value)}
-                          placeholder="https://youtube.com/watch?v=..."
-                          className="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:border-purple-500 focus:outline-none text-sm"
-                          disabled={loadingVideo}
-                          onKeyPress={(e) => e.key === 'Enter' && handleVideoLoad()}
-                        />
                         <button
-                          onClick={handleVideoLoad}
-                          disabled={loadingVideo || !videoUrl.trim()}
-                          className="px-4 py-2 bg-gray-600 hover:bg-gray-700 disabled:bg-gray-600 rounded-lg text-white text-sm font-medium transition-colors"
-                        >
-                          {loadingVideo ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            'Load'
-                          )}
+                onClick={togglePreviewFullscreen}
+                className="p-2 text-gray-300 hover:text-white transition-colors"
+              >
+                {isPreviewFullscreen ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
                         </button>
                       </div>
                     </div>
                     
-
-                  </div>
-                </div>
-              </TabPanel>
-            )}
-            
-            <TabPanel id="elements">
-              <div className="p-4">
-                {videoData ? (
-                  <>
-                    <SubtitleGenerator />
-                    <ElementLibrary 
-                      onEditElement={handleEditElement} 
-                      onSelectElement={(element: ThumbnailElement) => {
-                        setThumbnailElements([...thumbnailElements, element]);
-                      }} 
+          {/* Thumbnail Variations */}
+          {variations.length > 0 && (
+            <div className="p-4 bg-gray-800 border-b border-gray-700">
+              <div className="flex space-x-2 overflow-x-auto">
+                {variations.map((variation, index) => (
+                        <button 
+                    key={index}
+                    onClick={() => setSelectedVariation(index)}
+                    className={`flex-shrink-0 w-20 h-12 rounded-lg overflow-hidden border-2 transition-all ${
+                      selectedVariation === index
+                        ? 'border-purple-500 ring-2 ring-purple-500/50'
+                        : 'border-gray-600 hover:border-gray-500'
+                    }`}
+                  >
+                    <img
+                      src={variation.url}
+                      alt={`Variation ${index + 1}`}
+                      className="w-full h-full object-cover"
                     />
-                  </>
-                ) : (
-                  <div className="text-center py-8">
-                    <Image className="w-12 h-12 text-gray-500 mx-auto mb-4" />
-                    <h3 className="text-lg font-medium text-gray-300 mb-2">Start Creating</h3>
-                    <p className="text-sm text-gray-400 mb-4">Create a blank canvas or load a video to access elements</p>
-                    <div className="flex flex-col gap-2">
+                        </button>
+                ))}
+                      </div>
+                    </div>
+          )}
+
+          {/* Main Preview */}
+          <div className="flex-1 flex items-center justify-center p-4 overflow-hidden">
+            {generating ? (
+              <LoadingState 
+                stage="generating"
+                message="Creating amazing thumbnails..."
+                progress={75}
+              />
+            ) : (
+              <div className={`relative ${
+                viewMode === 'mobile' ? 'w-64' : 
+                viewMode === 'tablet' ? 'w-96' : 
+                'w-full max-w-2xl'
+              }`}>
+                                 <ThumbnailPreview
+                   videoTitle={videoData.title}
+                   videoTypography={videoData.typography}
+                   elements={thumbnailElements}
+                   onElementsChange={setThumbnailElements}
+                   generatedImage={selectedVariation >= 0 ? variations[selectedVariation]?.url : null}
+                   isGenerating={generating}
+                 />
+                </div>
+            )}
+          </div>
+
+          {/* Mobile Quick Actions */}
+          {viewMode === 'mobile' && !isPreviewFullscreen && (
+            <div className="p-4 bg-gray-800 border-t border-gray-700">
+              <div className="flex justify-center space-x-4">
+                {quickActions.map((action, index) => (
                       <button 
-                        onClick={handleCreateBlankTemplate}
-                        className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-white text-sm font-medium transition-colors"
-                      >
-                        Start Blank Canvas
+                    key={index}
+                    onClick={action.action}
+                    disabled={action.loading}
+                    className={`${action.color} hover:opacity-90 text-white p-3 rounded-full shadow-lg transition-all disabled:opacity-50`}
+                  >
+                    {action.loading ? (
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                    ) : (
+                      <action.icon className="w-5 h-5" />
+                    )}
                       </button>
-                      <button 
-                        onClick={() => setActiveTab('video')}
-                        className="px-4 py-2 bg-gray-600 hover:bg-gray-700 rounded-lg text-white text-sm font-medium transition-colors"
-                      >
-                        Load Video
-                      </button>
+                ))}
                     </div>
                   </div>
                 )}
               </div>
-            </TabPanel>
-            
-            <TabPanel id="people">
-              <div className="p-4">
-                {videoData ? (
-                  <PeopleExtractor />
-                ) : (
-                  <div className="text-center py-8">
-                    <Users className="w-12 h-12 text-gray-500 mx-auto mb-4" />
-                    <h3 className="text-lg font-medium text-gray-300 mb-2">No Video Loaded</h3>
-                    <p className="text-sm text-gray-400 mb-4">Load a YouTube video first to extract people</p>
+
+        {/* Overlay Panel for Mobile/Tablet */}
+        {panelMode === 'overlay' && (
+          <div className="fixed inset-y-0 right-0 w-80 bg-gray-800 border-l border-gray-700 shadow-xl z-40 flex flex-col">
+            {/* Panel Navigation */}
+            <div className="flex border-b border-gray-700">
+              {panelTabs.map((tab) => (
                     <button 
-                      onClick={() => setActiveTab('video')}
-                      className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-white text-sm font-medium transition-colors"
-                    >
-                      Load Video
+                  key={tab.id}
+                  onClick={() => setActivePanel(tab.id as any)}
+                  className={`flex-1 p-3 text-sm font-medium transition-colors border-b-2 ${
+                    activePanel === tab.id
+                      ? `${tab.color} border-current`
+                      : 'text-gray-400 hover:text-gray-300 border-transparent'
+                  }`}
+                >
+                  <tab.icon className="w-4 h-4 mx-auto mb-1" />
+                  <div className="text-xs">{tab.label}</div>
                     </button>
-                  </div>
-                )}
+              ))}
               </div>
-            </TabPanel>
             
-            <TabPanel id="controls">
-              <div className="p-4">
-                {selectedElementId && (
-                  <ThumbnailControls
-                    selectedElementId={selectedElementId}
-                    showElementControls={showElementControls}
-                    onClose={handleCloseElementControls}
+            {/* Panel Content */}
+            <div className="flex-1 overflow-hidden">
+              {renderPanelContent()}
+            </div>
+          </div>
+        )}
+
+        {/* Overlay backdrop */}
+        {panelMode === 'overlay' && (
+          <div
+            className="fixed inset-0 bg-black/50 z-30"
+            onClick={() => setPanelMode('collapsed')}
                   />
                 )}
               </div>
-            </TabPanel>
-            
-            <TabPanel id="settings">
-              <div className="p-4 space-y-4">
-                <CreatorTypeSelector />
-                <CostOptimizationPanel />
-              </div>
-            </TabPanel>
-            
-            <TabPanel id="export">
-              <div className="p-4">
-                <BatchExportPanel />
-              </div>
-            </TabPanel>
-            
-            <TabPanel id="generate">
-              <div className="p-4">
-                <GenerationPanel onGenerate={handleGenerate} />
-              </div>
-            </TabPanel>
-          </Tabs>
-        </div>
-      </div>
 
-      {/* Export Menu Modal */}
-      <ExportMenu
-        isOpen={showExportMenu}
-        onClose={() => setShowExportMenu(false)}
-        thumbnailUrl={selectedVariation !== -1 ? variations[selectedVariation]?.url : undefined}
-        variations={variations}
-        videoTitle={videoData?.title}
-      />
+      {/* Export Menu */}
+      {showExportMenu && (
+                 <ExportMenu
+           isOpen={showExportMenu}
+           onClose={() => setShowExportMenu(false)}
+           thumbnailUrl={selectedVariation >= 0 ? variations[selectedVariation]?.url : undefined}
+           variations={variations}
+           videoTitle={videoData?.title}
+         />
+      )}
     </div>
   );
 };

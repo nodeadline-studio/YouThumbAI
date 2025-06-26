@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useVideoStore } from '../store/videoStore';
 import ThumbnailPreview from './ThumbnailPreview';
 import ThumbnailControls from './ThumbnailControls';
 import ElementLibrary from './ElementLibrary';
 import BatchExportPanel from './BatchExportPanel';
+import LoadingState from './LoadingState';
 
-import { Sparkles, Download, Loader2, RefreshCw, Library, Sliders, Users, Image, Settings, Type, Blend, Youtube, Link } from 'lucide-react';
+import { Sparkles, Download, Loader2, RefreshCw, Library, Sliders, Users, Image, Settings, Type, Blend, Youtube, Link, Upload, Palette } from 'lucide-react';
 import { saveAs } from 'file-saver';
 import { generateThumbnail } from '../modules/ai/dalleService';
 import { Tabs, TabList, Tab, TabPanel } from './Tabs';
@@ -16,6 +17,8 @@ import CostOptimizationPanel from './CostOptimizationPanel';
 import GenerationPanel from './GenerationPanel';
 import { ThumbnailElement, ThumbnailElementType } from '../types';
 import { getVideoMetadata, extractVideoId } from '../lib/youtubeApi';
+import { enhancedTextBlending } from '../modules/ai/enhancedTextBlending';
+import { clientMediaProcessor, MediaFile } from '../utils/clientMediaProcessor';
 
 interface ThumbnailVariation {
   url: string;
@@ -50,6 +53,11 @@ const ThumbnailEditor: React.FC = () => {
   const [activeTab, setActiveTab] = useState<string>(videoData ? 'elements' : 'video');
   const [videoUrl, setVideoUrl] = useState('');
   const [loadingVideo, setLoadingVideo] = useState(false);
+  const [uploadedMedia, setUploadedMedia] = useState<MediaFile | null>(null);
+  const [processingMedia, setProcessingMedia] = useState(false);
+  const [mediaProgress, setMediaProgress] = useState(0);
+  const [blendingText, setBlendingText] = useState(false);
+  const [blendProgress, setBlendProgress] = useState(0);
 
 
   const handleEditElement = (id: string) => {
@@ -57,6 +65,122 @@ const ThumbnailEditor: React.FC = () => {
     setShowElementControls(true);
     setActiveTab('controls');
   };
+
+  // Enhanced media upload handler
+  const handleMediaUpload = useCallback(async (files: FileList) => {
+    if (files.length === 0) return;
+    
+    const file = files[0];
+    if (!clientMediaProcessor.isFormatSupported(file)) {
+      alert('Unsupported file format. Please use JPEG, PNG, WebP, MP4, WebM, or OGG files.');
+      return;
+    }
+
+    setProcessingMedia(true);
+    setMediaProgress(0);
+
+    try {
+      const processedMedia = await clientMediaProcessor.processMediaFile(
+        file,
+        { maxWidth: 1920, maxHeight: 1080, quality: 0.9 },
+        (progress) => setMediaProgress(progress)
+      );
+
+      setUploadedMedia(processedMedia);
+      
+      // Create video data from uploaded media
+      const mediaVideoData = {
+        id: `uploaded-${Date.now()}`,
+        title: file.name.replace(/\.[^/.]+$/, ''),
+        description: 'Uploaded custom media',
+        channelTitle: 'Custom Upload',
+        publishedAt: new Date().toISOString(),
+        duration: processedMedia.duration ? `${Math.floor(processedMedia.duration / 60)}:${String(Math.floor(processedMedia.duration % 60)).padStart(2, '0')}` : '0:00',
+        viewCount: '0',
+        likeCount: '0',
+        commentCount: '0',
+        thumbnailUrl: processedMedia.url,
+        channelId: 'custom',
+        tags: ['custom', 'uploaded'],
+        categoryId: '0',
+        language: { code: 'en', name: 'English', direction: 'ltr' as const },
+        isLiveContent: false,
+        typography: {
+          direction: 'ltr' as const,
+          fontFamily: 'Arial, sans-serif'
+        }
+      };
+      
+      setVideoData(mediaVideoData);
+      setActiveTab('elements');
+    } catch (error) {
+      console.error('Error processing media:', error);
+      alert('Failed to process media file. Please try again.');
+    } finally {
+      setProcessingMedia(false);
+      setMediaProgress(0);
+    }
+  }, [setVideoData]);
+
+  // Enhanced text blending with context awareness
+  const handleAdvancedTextBlend = useCallback(async (elementId: string) => {
+    if (selectedVariation === -1) {
+      alert('Please select a thumbnail variation first');
+      return;
+    }
+
+    const element = thumbnailElements.find(el => el.id === elementId);
+    if (!element || element.type !== 'text') {
+      alert('Invalid text element');
+      return;
+    }
+
+    setBlendingText(true);
+    setBlendProgress(0);
+
+    try {
+      const currentThumbnail = variations[selectedVariation];
+      
+             const blendOptions = {
+         text: element.content || '',
+         position: { x: element.x, y: element.y },
+         style: {
+           fontSize: element.size || 24,
+           fontFamily: 'Arial, sans-serif',
+           color: element.color || '#ffffff',
+           bold: false,
+           italic: false,
+           shadow: true,
+           outline: true
+         },
+         blendMode: 'natural' as const,
+         language: videoData?.language.code === 'ru' ? 'ru' as const : 'en' as const
+       };
+
+      const result = await enhancedTextBlending.blendTextIntoImage(
+        currentThumbnail.url,
+        blendOptions,
+        (progress) => setBlendProgress(progress)
+      );
+
+      // Update the variation with the blended result
+      const newVariations = [...variations];
+      newVariations[selectedVariation] = {
+        ...currentThumbnail,
+        url: result.imageUrl,
+        label: `${currentThumbnail.label} (Blended)`
+      };
+      setVariations(newVariations);
+      
+      alert(`Text blended successfully! Quality: ${Math.round(result.blendQuality * 100)}%`);
+    } catch (error) {
+      console.error('Error blending text:', error);
+      alert('Failed to blend text. Please try again.');
+    } finally {
+      setBlendingText(false);
+      setBlendProgress(0);
+    }
+  }, [selectedVariation, variations, thumbnailElements, videoData]);
 
   if (!videoData) {
     return null;
@@ -628,6 +752,12 @@ const ThumbnailEditor: React.FC = () => {
                   <span className="text-xs">Video</span>
                 </Tab>
               )}
+              {!videoData && (
+                <Tab id="upload">
+                  <Upload className="w-4 h-4 mr-1" />
+                  <span className="text-xs">Upload</span>
+                </Tab>
+              )}
               <Tab id="elements">
                 <Library className="w-4 h-4 mr-1" />
                 <span className="text-xs">Elements</span>
@@ -714,6 +844,99 @@ const ThumbnailEditor: React.FC = () => {
                 </div>
               </TabPanel>
             )}
+
+            {!videoData && (
+              <TabPanel id="upload">
+                <div className="p-4">
+                  <div className="text-center mb-6">
+                    <h3 className="text-lg font-semibold mb-2 text-gray-200">Upload Custom Media</h3>
+                    <p className="text-sm text-gray-400">Use your own images or videos as a starting point</p>
+                  </div>
+                  
+                  {processingMedia ? (
+                    <LoadingState 
+                      message="Processing Media..." 
+                      progress={mediaProgress}
+                      subMessage="Optimizing and analyzing your file"
+                      type="processing"
+                    />
+                  ) : (
+                    <div className="space-y-4">
+                      {/* Drag & Drop Zone */}
+                      <div 
+                        className="border-2 border-dashed border-gray-600 hover:border-purple-500 rounded-lg p-8 text-center transition-colors cursor-pointer bg-gray-800/50 hover:bg-gray-700/50"
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          handleMediaUpload(e.dataTransfer.files);
+                        }}
+                        onDragOver={(e) => e.preventDefault()}
+                        onClick={() => {
+                          const input = document.createElement('input');
+                          input.type = 'file';
+                          input.accept = 'image/*,video/*';
+                          input.onchange = (e) => {
+                            const files = (e.target as HTMLInputElement).files;
+                            if (files) handleMediaUpload(files);
+                          };
+                          input.click();
+                        }}
+                      >
+                        <div className="w-16 h-16 bg-gradient-to-r from-purple-600 to-blue-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                          <Upload className="w-8 h-8 text-white" />
+                        </div>
+                        <h4 className="font-semibold text-white mb-2">Drop files here or click to browse</h4>
+                        <p className="text-sm text-gray-400 mb-4">
+                          Supports JPEG, PNG, WebP, GIF, MP4, WebM
+                        </p>
+                        <div className="text-xs text-gray-500">
+                          <p>• Images: Up to 10MB</p>
+                          <p>• Videos: Up to 100MB</p>
+                          <p>• Client-side processing (never uploaded to servers)</p>
+                        </div>
+                      </div>
+
+                      {/* Privacy Notice */}
+                      <div className="bg-green-900/20 border border-green-500/30 rounded-lg p-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 bg-green-600 rounded-full flex items-center justify-center flex-shrink-0">
+                            <span className="text-white text-xs">🔒</span>
+                          </div>
+                          <div>
+                            <h4 className="font-semibold text-green-300 mb-1">Privacy Protected</h4>
+                            <p className="text-sm text-gray-300">
+                              Your media is processed entirely in your browser. Nothing is uploaded to our servers.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Features List */}
+                      <div className="bg-purple-900/20 border border-purple-500/30 rounded-lg p-4">
+                        <h4 className="font-semibold text-purple-300 mb-3">What you can do:</h4>
+                        <div className="space-y-2 text-sm text-gray-300">
+                          <div className="flex items-center gap-2">
+                            <Palette className="w-4 h-4 text-purple-400" />
+                            <span>Extract colors from your images for theming</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Image className="w-4 h-4 text-blue-400" />
+                            <span>Auto-resize and optimize for YouTube thumbnails</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Blend className="w-4 h-4 text-pink-400" />
+                            <span>Blend text naturally into your images</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Sparkles className="w-4 h-4 text-yellow-400" />
+                            <span>Use as base for AI-enhanced thumbnails</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </TabPanel>
+            )}
             
             <TabPanel id="elements">
               <div className="p-4">
@@ -723,6 +946,59 @@ const ThumbnailEditor: React.FC = () => {
                     <ElementLibrary onEditElement={handleEditElement} onSelectElement={(element: ThumbnailElement) => {
                       setThumbnailElements([...thumbnailElements, element]);
                     }} />
+                    
+                    {/* Advanced Text Blending Section */}
+                    {thumbnailElements.filter(el => el.type === 'text').length > 0 && (
+                      <div className="mt-6 p-4 bg-gradient-to-r from-pink-900/30 to-purple-900/30 border border-pink-500/30 rounded-lg">
+                        <div className="flex items-center gap-3 mb-3">
+                          <Blend className="w-5 h-5 text-pink-400" />
+                          <h3 className="font-semibold text-pink-300">Advanced Text Blending</h3>
+                        </div>
+                        <p className="text-sm text-gray-300 mb-4">
+                          Make your text look naturally integrated into the image with AI-powered blending
+                        </p>
+                        
+                        {blendingText && (
+                          <LoadingState 
+                            message="Blending Text..." 
+                            progress={blendProgress}
+                            subMessage="Creating natural text integration"
+                            type="blending"
+                          />
+                        )}
+                        
+                        {!blendingText && (
+                          <div className="space-y-2">
+                            {thumbnailElements
+                              .filter(el => el.type === 'text')
+                              .map(textElement => (
+                                <div key={textElement.id} className="flex items-center justify-between p-3 bg-gray-800/50 rounded-lg">
+                                  <div className="flex items-center gap-3">
+                                    <Type className="w-4 h-4 text-gray-400" />
+                                    <div>
+                                      <div className="font-medium text-white text-sm">
+                                        "{textElement.content}"
+                                      </div>
+                                      <div className="text-xs text-gray-400">
+                                        Position: {textElement.x}%, {textElement.y}%
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <button
+                                    onClick={() => handleAdvancedTextBlend(textElement.id)}
+                                    disabled={blendingText || selectedVariation === -1}
+                                    className="px-3 py-1.5 bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed rounded text-xs font-medium text-white transition-all"
+                                    title={selectedVariation === -1 ? "Generate a thumbnail first" : "Blend this text naturally into the image"}
+                                  >
+                                    Blend
+                                  </button>
+                                </div>
+                              ))
+                            }
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </>
                 ) : (
                   <div className="text-center py-8">
